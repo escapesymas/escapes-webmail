@@ -44,8 +44,8 @@ function persistSubscriptions(subs: PushSubscriptionRecord[]) {
 // Almacén de suscripciones activas
 const subscriptions: PushSubscriptionRecord[] = loadSubscriptions();
 
-const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY || 'BEl62iUYgUivxIkv69yViEuiBIa-Ib9-SkvMeAtA3LFgDzkrxZJjSgSnfckjBJuBkr3qBUYIHBQFLXYp5Nksh8U';
-const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY || 'UUxI4O84qE8_a0rW4_a-hWcO4wZ8m5eR8s7eW1_r3vA';
+const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY || 'BLwPrhtaKSOg1opTzFI8erHC8kKksUfVoI7IdUHF9240M8D-vVs4ClfjRa1w-WPrMyzg1BLzNmSZHlPnsOu6nFI';
+const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY || 'GRBdcL4m7pQRvDkQbwkILTFalnVn8wTupTzNTxj3XL8';
 const VAPID_SUBJECT = process.env.VAPID_SUBJECT || 'mailto:info@escapesymas.com';
 
 try {
@@ -75,7 +75,7 @@ export async function sendPushNotification(email: string, title: string, body: s
 
   if (targetSubs.length === 0) {
     console.log(`[PUSH] Sin suscripciones activas para ${cleanEmail}`);
-    return 0;
+    return { sent: 0, error: 'No hay dispositivos suscritos. Pulsa «Activar avisos» para registrar este dispositivo.' };
   }
 
   // Notificación compatible con iOS (PNG en lugar de SVG)
@@ -89,6 +89,7 @@ export async function sendPushNotification(email: string, title: string, body: s
 
   let removedAny = false;
   let sentCount = 0;
+  let lastError: string | null = null;
 
   const promises = targetSubs.map(async (sub) => {
     try {
@@ -97,13 +98,18 @@ export async function sendPushNotification(email: string, title: string, body: s
           endpoint: sub.endpoint,
           keys: sub.keys,
         },
-        payload
+        payload,
+        {
+          TTL: 86400,
+          urgency: 'high',
+        }
       );
       sentCount++;
     } catch (err: any) {
-      console.warn(`[PUSH] Error enviando a ${sub.endpoint.slice(0, 30)}...:`, err.message);
-      if (err.statusCode === 404 || err.statusCode === 410) {
-        // Suscripción caducada
+      console.warn(`[PUSH] Error enviando a ${sub.endpoint.slice(0, 35)}...:`, err.statusCode || '', err.body || err.message);
+      lastError = err.body || err.message;
+      if (err.statusCode === 400 || err.statusCode === 404 || err.statusCode === 410) {
+        // Suscripción caducada o con clave anterior desactualizada
         const idx = subscriptions.indexOf(sub);
         if (idx >= 0) {
           subscriptions.splice(idx, 1);
@@ -119,5 +125,8 @@ export async function sendPushNotification(email: string, title: string, body: s
   }
 
   console.log(`[PUSH] Notificación enviada a ${sentCount} dispositivo(s) de ${cleanEmail}`);
-  return sentCount;
+  return {
+    sent: sentCount,
+    error: sentCount > 0 ? null : (lastError || 'No se pudo entregar la notificación en el dispositivo')
+  };
 }

@@ -333,14 +333,53 @@ export default function App() {
     return outputArray;
   }
 
+  function arrayBufferToBase64Url(buffer: ArrayBuffer): string {
+    const bytes = new Uint8Array(buffer);
+    let binary = '';
+    for (let i = 0; i < bytes.byteLength; i++) {
+      binary += String.fromCharCode(bytes[i]);
+    }
+    return window.btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  }
+
   // Comprobar suscripción existente al arrancar y sincronizar con servidor
   useEffect(() => {
     if ('serviceWorker' in navigator && 'PushManager' in window && token) {
-      navigator.serviceWorker.ready.then((reg) => {
-        reg.pushManager.getSubscription().then((sub) => {
+      navigator.serviceWorker.ready.then(async (reg) => {
+        try {
+          const keyRes = await fetch('/api/push/vapid-key');
+          const { publicKey } = await keyRes.json();
+          const convertedKey = urlBase64ToUint8Array(publicKey);
+
+          let sub = await reg.pushManager.getSubscription();
+          if (sub) {
+            // Verificar si la suscripción usa la clave VAPID actual del servidor
+            const currentSubKey = (sub.options as any)?.applicationServerKey
+              ? arrayBufferToBase64Url((sub.options as any).applicationServerKey)
+              : null;
+
+            if (currentSubKey && currentSubKey !== publicKey) {
+              console.warn('[PUSH] Clave VAPID desactualizada detectada. Desuscribiendo clave antigua...');
+              await sub.unsubscribe().catch(() => {});
+              sub = null;
+            }
+          }
+
+          // Si el usuario ya tenía permiso concedido pero la suscripción se renovó o faltaba
+          if (!sub && typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+            try {
+              sub = await reg.pushManager.subscribe({
+                userVisibleOnly: true,
+                applicationServerKey: convertedKey,
+              });
+            } catch (e) {
+              console.warn('[PUSH] No se pudo renovar automáticamente:', e);
+            }
+          }
+
           if (sub) {
             setPushEnabled(true);
-            fetch('/api/push/subscribe', {
+            await fetch('/api/push/subscribe', {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
@@ -348,8 +387,12 @@ export default function App() {
               },
               body: JSON.stringify({ subscription: sub }),
             }).catch(() => {});
+          } else {
+            setPushEnabled(false);
           }
-        });
+        } catch (err) {
+          console.warn('[PUSH] Error verificando suscripción inicial:', err);
+        }
       });
     }
   }, [token]);
@@ -381,13 +424,18 @@ export default function App() {
       const { publicKey } = await keyRes.json();
       const convertedKey = urlBase64ToUint8Array(publicKey);
 
-      let subscription = await reg.pushManager.getSubscription();
-      if (!subscription) {
-        subscription = await reg.pushManager.subscribe({
-          userVisibleOnly: true,
-          applicationServerKey: convertedKey,
-        });
+      // Desuscribir siempre cualquier suscripción previa para garantizar clave VAPID limpia
+      const existingSub = await reg.pushManager.getSubscription();
+      if (existingSub) {
+        try {
+          await existingSub.unsubscribe();
+        } catch {}
       }
+
+      const subscription = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: convertedKey,
+      });
 
       await fetch('/api/push/subscribe', {
         method: 'POST',
@@ -419,7 +467,7 @@ export default function App() {
       if (data.sent > 0) {
         showToast('✓ Notificación enviada. Comprueba tu pantalla.');
       } else {
-        alert('No hay dispositivos suscritos. Pulsa «Activar notificaciones» primero.');
+        alert(data.error || 'No se pudo entregar el aviso. Toca en el botón para reactivar las notificaciones.');
       }
     } catch {
       alert('Error enviando notificación de prueba.');

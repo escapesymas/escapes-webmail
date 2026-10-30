@@ -256,26 +256,26 @@ app.post('/api/push/incoming-notify', async (req, res) => {
   const cleanFrom = String(from || 'Nuevo correo').replace(/[\r\n]/g, '').trim();
   const cleanSubject = String(subject || '(Sin asunto)').replace(/[\r\n]/g, '').trim();
 
-  const count = await sendPushNotification(
+  const result = await sendPushNotification(
     cleanTo,
     cleanFrom,
     cleanSubject,
     '/'
   );
 
-  res.json({ success: true, sent: count });
+  res.json({ success: result.sent > 0, sent: result.sent, error: result.error });
 });
 
 // Enviar notificación de prueba a la cuenta actual
 app.post('/api/push/test', authenticateToken, async (req: any, res) => {
-  const count = await sendPushNotification(
+  const result = await sendPushNotification(
     req.user.email,
     '🔔 Prueba de notificación',
     'Las notificaciones push en tu dispositivo funcionan correctamente.',
     '/'
   );
 
-  res.json({ success: true, sent: count });
+  res.json({ success: result.sent > 0, sent: result.sent, error: result.error });
 });
 
 // Servir frontend compilado en producción
