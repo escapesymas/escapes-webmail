@@ -1,5 +1,5 @@
 // Service Worker para Escapes Mail PWA
-const SW_VERSION = 'v1.0.0';
+const SW_VERSION = 'v1.0.1';
 const CACHE_NAME = `escapes-mail-${SW_VERSION}`;
 
 self.addEventListener('install', (event) => {
@@ -23,8 +23,8 @@ self.addEventListener('push', (event) => {
   let data = {
     title: 'Nuevo correo en Escapes y Más',
     body: 'Has recibido un nuevo mensaje.',
-    icon: '/mail-icon.svg',
-    badge: '/mail-icon.svg',
+    icon: '/icon-192.png',
+    badge: '/apple-touch-icon.png',
     data: { url: '/' }
   };
 
@@ -34,8 +34,8 @@ self.addEventListener('push', (event) => {
       data = {
         title: payload.title || data.title,
         body: payload.body || data.body,
-        icon: payload.icon || data.icon,
-        badge: payload.badge || data.badge,
+        icon: payload.icon || '/icon-192.png',
+        badge: payload.badge || '/apple-touch-icon.png',
         data: payload.data || data.data
       };
     }
@@ -49,12 +49,10 @@ self.addEventListener('push', (event) => {
     body: data.body,
     icon: data.icon,
     badge: data.badge,
-    vibrate: [100, 50, 100],
+    vibrate: [150, 75, 150],
     data: data.data,
-    actions: [
-      { action: 'open', title: 'Abrir correo' },
-      { action: 'dismiss', title: 'Ignorar' }
-    ]
+    tag: 'escapes-mail-new',
+    renotify: true,
   };
 
   event.waitUntil(
@@ -64,8 +62,6 @@ self.addEventListener('push', (event) => {
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-
-  if (event.action === 'dismiss') return;
 
   const targetUrl = (event.notification.data && event.notification.data.url) || '/';
 

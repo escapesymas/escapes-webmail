@@ -321,6 +321,39 @@ export default function App() {
     setIsComposeOpen(true);
   };
 
+  // Conversión de clave VAPID pública a Uint8Array (crucial para Safari / iOS)
+  function urlBase64ToUint8Array(base64String: string): Uint8Array {
+    const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+    const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+    const rawData = window.atob(base64);
+    const outputArray = new Uint8Array(rawData.length);
+    for (let i = 0; i < rawData.length; ++i) {
+      outputArray[i] = rawData.charCodeAt(i);
+    }
+    return outputArray;
+  }
+
+  // Comprobar suscripción existente al arrancar y sincronizar con servidor
+  useEffect(() => {
+    if ('serviceWorker' in navigator && 'PushManager' in window && token) {
+      navigator.serviceWorker.ready.then((reg) => {
+        reg.pushManager.getSubscription().then((sub) => {
+          if (sub) {
+            setPushEnabled(true);
+            fetch('/api/push/subscribe', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${token}`,
+              },
+              body: JSON.stringify({ subscription: sub }),
+            }).catch(() => {});
+          }
+        });
+      });
+    }
+  }, [token]);
+
   // Activar Notificaciones Web Push
   const handleEnablePush = async () => {
     if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
@@ -328,15 +361,33 @@ export default function App() {
       return;
     }
 
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true;
+
+    if (isIOS && !isStandalone) {
+      alert('En iPhone, para recibir notificaciones primero toca el botón Compartir → «Añadir a la pantalla de inicio» y abre el correo desde ese icono instalado.');
+      return;
+    }
+
     try {
+      const permission = await Notification.requestPermission();
+      if (permission !== 'granted') {
+        alert('Permiso de notificaciones denegado. Actívalo en Ajustes de tu dispositivo.');
+        return;
+      }
+
       const reg = await navigator.serviceWorker.ready;
       const keyRes = await fetch('/api/push/vapid-key');
       const { publicKey } = await keyRes.json();
+      const convertedKey = urlBase64ToUint8Array(publicKey);
 
-      const subscription = await reg.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: publicKey,
-      });
+      let subscription = await reg.pushManager.getSubscription();
+      if (!subscription) {
+        subscription = await reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: convertedKey,
+        });
+      }
 
       await fetch('/api/push/subscribe', {
         method: 'POST',
@@ -348,10 +399,30 @@ export default function App() {
       });
 
       setPushEnabled(true);
-      alert('¡Notificaciones activadas con éxito! Recibirás avisos en tu pantalla de inicio.');
-    } catch (err) {
+      showToast('✓ Notificaciones push activadas con éxito');
+    } catch (err: any) {
       console.error('Error al activar notificaciones:', err);
-      alert('No se pudieron activar las notificaciones. Asegúrate de conceder permisos.');
+      alert(err.message || 'Error al activar notificaciones.');
+    }
+  };
+
+  // Enviar aviso de prueba
+  const handleTestPush = async () => {
+    if (!token) return;
+    try {
+      showToast('Enviando notificación de prueba...');
+      const res = await fetch('/api/push/test', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (data.sent > 0) {
+        showToast('✓ Notificación enviada. Comprueba tu pantalla.');
+      } else {
+        alert('No hay dispositivos suscritos. Pulsa «Activar notificaciones» primero.');
+      }
+    } catch {
+      alert('Error enviando notificación de prueba.');
     }
   };
 
@@ -390,6 +461,7 @@ export default function App() {
           userEmail={userEmail}
           unreadCount={unreadCount}
           onEnablePush={handleEnablePush}
+          onTestPush={handleTestPush}
           pushEnabled={pushEnabled}
           savedAccounts={savedAccounts}
           onSwitchAccount={handleSwitchAccount}
@@ -469,6 +541,9 @@ export default function App() {
         currentEmail={userEmail}
         onSwitchAccount={handleSwitchAccount}
         onAddAccount={() => setIsAddingAccount(true)}
+        pushEnabled={pushEnabled}
+        onEnablePush={handleEnablePush}
+        onTestPush={handleTestPush}
       />
 
       {/* Modal Redactar Correo */}

@@ -14,6 +14,7 @@ interface SidebarProps {
   userEmail: string;
   unreadCount?: number;
   onEnablePush?: () => void;
+  onTestPush?: () => void;
   pushEnabled?: boolean;
   savedAccounts?: Account[];
   onSwitchAccount?: (account: Account) => void;
@@ -29,6 +30,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   userEmail,
   unreadCount = 0,
   onEnablePush,
+  onTestPush,
   pushEnabled = false,
   savedAccounts = [],
   onSwitchAccount,
@@ -179,19 +181,30 @@ export const Sidebar: React.FC<SidebarProps> = ({
       {/* Pie con opciones y notificaciones */}
       <div className="p-3 border-t border-tech-border space-y-2">
         {onEnablePush && (
-          <button
-            onClick={onEnablePush}
-            className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium border transition-colors ${
-              pushEnabled
-                ? 'border-emerald-500/30 text-emerald-400 bg-emerald-950/20'
-                : 'border-tech-border text-tech-muted hover:text-tech-text hover:bg-tech-card-hover'
-            }`}
-          >
-            <Bell className="w-4 h-4 shrink-0" />
-            <span className="truncate">
-              {pushEnabled ? 'Notificaciones activas' : 'Activar notificaciones'}
-            </span>
-          </button>
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={onEnablePush}
+              className={`flex-1 flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium border transition-colors ${
+                pushEnabled
+                  ? 'border-emerald-500/30 text-emerald-400 bg-emerald-950/20'
+                  : 'border-tech-border text-tech-muted hover:text-tech-text hover:bg-tech-card-hover'
+              }`}
+            >
+              <Bell className="w-4 h-4 shrink-0" />
+              <span className="truncate">
+                {pushEnabled ? 'Notificaciones activas' : 'Activar notificaciones'}
+              </span>
+            </button>
+            {pushEnabled && onTestPush && (
+              <button
+                onClick={onTestPush}
+                title="Enviar notificación de prueba"
+                className="px-2.5 py-2 rounded-xl text-xs font-medium border border-tech-border text-tech-muted hover:text-tech-yellow hover:bg-tech-card-hover transition-colors"
+              >
+                Probar
+              </button>
+            )}
+          </div>
         )}
 
         <button

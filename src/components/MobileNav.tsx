@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Inbox, Send, Plus, Folder, Users, LogOut, ChevronUp, UserCheck } from 'lucide-react';
+import { Inbox, Send, Plus, Folder, Users, LogOut, ChevronUp, UserCheck, Bell } from 'lucide-react';
 
 interface Account {
   email: string;
@@ -17,6 +17,9 @@ interface MobileNavProps {
   currentEmail?: string;
   onSwitchAccount?: (account: Account) => void;
   onAddAccount?: () => void;
+  pushEnabled?: boolean;
+  onEnablePush?: () => void;
+  onTestPush?: () => void;
 }
 
 export const MobileNav: React.FC<MobileNavProps> = ({
@@ -30,6 +33,9 @@ export const MobileNav: React.FC<MobileNavProps> = ({
   currentEmail = '',
   onSwitchAccount,
   onAddAccount,
+  pushEnabled = false,
+  onEnablePush,
+  onTestPush,
 }) => {
   const [showFoldersSheet, setShowFoldersSheet] = useState(false);
   const [showAccountsSheet, setShowAccountsSheet] = useState(false);
@@ -107,6 +113,30 @@ export const MobileNav: React.FC<MobileNavProps> = ({
                 {acc.email === currentEmail && <UserCheck className="w-4 h-4 text-tech-yellow shrink-0" />}
               </button>
             ))}
+
+            {onEnablePush && (
+              <div className="pt-2 border-t border-tech-border flex items-center gap-2">
+                <button
+                  onClick={onEnablePush}
+                  className={`flex-1 py-2.5 px-3 rounded-xl border text-xs font-semibold flex items-center justify-center gap-2 transition-colors ${
+                    pushEnabled
+                      ? 'border-emerald-500/40 text-emerald-400 bg-emerald-950/20'
+                      : 'border-tech-yellow text-tech-yellow bg-tech-yellow/10'
+                  }`}
+                >
+                  <Bell className="w-4 h-4 shrink-0" />
+                  <span>{pushEnabled ? 'Notificaciones activas' : 'Activar avisos en el móvil'}</span>
+                </button>
+                {pushEnabled && onTestPush && (
+                  <button
+                    onClick={onTestPush}
+                    className="py-2.5 px-3 rounded-xl border border-tech-border text-zinc-300 text-xs font-semibold hover:bg-tech-card-hover"
+                  >
+                    Probar
+                  </button>
+                )}
+              </div>
+            )}
 
             {onAddAccount && (
               <button

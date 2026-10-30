@@ -239,6 +239,45 @@ app.post('/api/push/subscribe', authenticateToken, (req: any, res) => {
   res.json({ success: true });
 });
 
+const INTERNAL_PUSH_SECRET = process.env.INTERNAL_PUSH_SECRET || 'escapes-push-secret-2026';
+
+// Webhook para avisos de correo entrante desde Poste.io (Haraka)
+app.post('/api/push/incoming-notify', async (req, res) => {
+  const { secret, to, from, subject } = req.body;
+  if (secret !== INTERNAL_PUSH_SECRET) {
+    return res.status(403).json({ error: 'No autorizado' });
+  }
+
+  if (!to) {
+    return res.status(400).json({ error: 'Destinatario requerido' });
+  }
+
+  const cleanTo = String(to).replace(/[<>]/g, '').trim().toLowerCase();
+  const cleanFrom = String(from || 'Nuevo correo').replace(/[\r\n]/g, '').trim();
+  const cleanSubject = String(subject || '(Sin asunto)').replace(/[\r\n]/g, '').trim();
+
+  const count = await sendPushNotification(
+    cleanTo,
+    cleanFrom,
+    cleanSubject,
+    '/'
+  );
+
+  res.json({ success: true, sent: count });
+});
+
+// Enviar notificación de prueba a la cuenta actual
+app.post('/api/push/test', authenticateToken, async (req: any, res) => {
+  const count = await sendPushNotification(
+    req.user.email,
+    '🔔 Prueba de notificación',
+    'Las notificaciones push en tu dispositivo funcionan correctamente.',
+    '/'
+  );
+
+  res.json({ success: true, sent: count });
+});
+
 // Servir frontend compilado en producción
 const clientDist = path.join(__dirname, '../client');
 app.use(express.static(clientDist));
