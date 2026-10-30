@@ -24,6 +24,20 @@ html, body {
   -webkit-user-select: none;
 }
 
+/* Safe Area Insets para iPhone (Dynamic Island, Notch y Barra inferior) */
+.pt-safe {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+.pb-safe {
+  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 0.75rem);
+}
+.pt-header-safe {
+  padding-top: calc(env(safe-area-inset-top, 0px) + 0.75rem);
+}
+.pb-nav-safe {
+  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 0.5rem);
+}
+
 /* Permitir selección de texto dentro de los correos para copiar */
 .prose, pre, input, textarea, code {
   user-select: text;

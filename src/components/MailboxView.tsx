@@ -93,8 +93,8 @@ export const MailboxView: React.FC<MailboxViewProps> = ({
 
   return (
     <div className="flex-1 flex flex-col h-full bg-tech-carbon overflow-hidden">
-      {/* Barra superior de carpeta y paginación */}
-      <div className="p-3 border-b border-tech-border flex items-center justify-between bg-tech-card/50 shrink-0">
+      {/* Barra superior de carpeta y paginación con soporte Safe Area iOS */}
+      <div className="pt-header-safe px-3 pb-3 border-b border-tech-border flex items-center justify-between bg-tech-card/80 shrink-0">
         <div className="flex items-center gap-2">
           <h2 className="text-base font-bold text-white capitalize">{folderName}</h2>
           <span className="text-xs text-tech-muted px-2 py-0.5 rounded-md bg-tech-card border border-tech-border">
@@ -209,7 +209,7 @@ export const MailboxView: React.FC<MailboxViewProps> = ({
       )}
 
       {/* Lista de mensajes */}
-      <div className="flex-1 overflow-y-auto divide-y divide-tech-border/50">
+      <div className="flex-1 overflow-y-auto divide-y divide-tech-border/50 pb-24 md:pb-0">
         {loading && messages.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-64 text-tech-muted gap-3">
             <div className="w-6 h-6 border-2 border-tech-yellow border-t-transparent rounded-full animate-spin" />

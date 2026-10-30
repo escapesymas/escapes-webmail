@@ -164,7 +164,7 @@ export const MobileNav: React.FC<MobileNavProps> = ({
       )}
 
       {/* Barra de navegación inferior móvil */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-tech-card border-t border-tech-border px-3 py-2 flex items-center justify-around z-40 pb-safe">
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-tech-card border-t border-tech-border px-3 pt-2 pb-nav-safe flex items-center justify-around z-40">
         <button
           onClick={() => onSelectFolder('INBOX')}
           className={`flex flex-col items-center gap-1 py-1 px-2.5 rounded-lg text-[11px] font-medium relative ${

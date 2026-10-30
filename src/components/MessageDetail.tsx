@@ -78,8 +78,8 @@ export const MessageDetail: React.FC<MessageDetailProps> = ({
 
   return (
     <div className="flex-1 flex flex-col h-full bg-tech-card overflow-hidden">
-      {/* Barra de herramientas */}
-      <div className="p-3 border-b border-tech-border flex items-center justify-between bg-tech-card/80 shrink-0">
+      {/* Barra de herramientas con soporte Safe Area iOS */}
+      <div className="pt-header-safe px-3 pb-3 border-b border-tech-border flex items-center justify-between bg-tech-card/80 shrink-0">
         <div className="flex items-center gap-2">
           <button
             onClick={onBack}
@@ -157,7 +157,7 @@ export const MessageDetail: React.FC<MessageDetailProps> = ({
       </div>
 
       {/* Contenido con scroll */}
-      <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
+      <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6 pb-28 md:pb-6">
         {/* Cabecera del mensaje */}
         <div>
           <h1 className="text-lg sm:text-xl font-bold text-white mb-3 leading-snug">

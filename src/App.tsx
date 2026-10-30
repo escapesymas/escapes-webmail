@@ -490,7 +490,7 @@ export default function App() {
   const unreadCount = messages.filter((m) => m.unread).length;
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-tech-carbon text-tech-text">
+    <div className="flex h-screen h-[100dvh] w-screen overflow-hidden bg-tech-carbon text-tech-text">
       {/* Barra lateral escritorio */}
       <div className="hidden md:flex">
         <Sidebar

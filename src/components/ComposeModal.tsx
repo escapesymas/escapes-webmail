@@ -140,7 +140,7 @@ export const ComposeModal: React.FC<ComposeModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 z-50">
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 z-50 pt-header-safe pb-nav-safe">
       <div className="bg-tech-card border border-tech-border rounded-2xl w-full max-w-2xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden animate-fadeIn">
         {/* Cabecera */}
         <div className="p-3.5 sm:p-4 border-b border-tech-border flex items-center justify-between bg-tech-card shrink-0">
