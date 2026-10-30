@@ -43,6 +43,12 @@ export default function App() {
   const [replyDraft, setReplyDraft] = useState<{ to?: string; subject?: string } | undefined>();
   const [pushEnabled, setPushEnabled] = useState(false);
   const [isAddingAccount, setIsAddingAccount] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+
+  const showToast = (msg: string) => {
+    setToast(msg);
+    setTimeout(() => setToast(null), 3500);
+  };
 
   // Guardar cuentas en LocalStorage
   const updateSavedAccounts = (email: string, newToken: string) => {
@@ -470,6 +476,7 @@ export default function App() {
         isOpen={isComposeOpen}
         onClose={() => setIsComposeOpen(false)}
         onSendSuccess={() => {
+          showToast('✓ Correo enviado correctamente');
           if (currentFolder.toUpperCase() === 'SENT') {
             fetchMessages('Sent', 1);
           }
@@ -478,6 +485,13 @@ export default function App() {
         initialSubject={replyDraft?.subject}
         senderEmail={userEmail}
       />
+
+      {/* Notificación Toast flotante */}
+      {toast && (
+        <div className="fixed bottom-20 left-1/2 -translate-x-1/2 sm:bottom-6 sm:right-6 sm:left-auto sm:translate-x-0 z-50 bg-emerald-600 text-white px-4 py-2.5 rounded-xl shadow-2xl font-semibold text-xs sm:text-sm flex items-center gap-2 border border-emerald-400/40">
+          <span>{toast}</span>
+        </div>
+      )}
     </div>
   );
 }

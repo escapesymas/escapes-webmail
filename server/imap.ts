@@ -116,11 +116,12 @@ export async function listMessages(
       if (search && search.trim()) {
         const query = search.trim();
         // Búsqueda en IMAP por remitente, asunto o cuerpo
-        const uids = await client.search(
+        const searchRes = await client.search(
           { or: [{ from: query }, { to: query }, { subject: query }, { body: query }] },
           { uid: true }
         );
 
+        const uids: number[] = Array.isArray(searchRes) ? searchRes : [];
         total = uids.length;
         if (total === 0) {
           return { messages: [], total: 0 };
@@ -141,7 +142,7 @@ export async function listMessages(
           }, { uid: true })) {
             const fromAddr = msg.envelope?.from?.[0];
             const toAddr = msg.envelope?.to?.[0];
-            const flags = Array.from(msg.flags || []);
+            const flags: string[] = Array.from(msg.flags || []).map((f) => String(f));
 
             messages.push({
               uid: msg.uid,
@@ -180,7 +181,7 @@ export async function listMessages(
           })) {
             const fromAddr = msg.envelope?.from?.[0];
             const toAddr = msg.envelope?.to?.[0];
-            const flags = Array.from(msg.flags || []);
+            const flags: string[] = Array.from(msg.flags || []).map((f) => String(f));
 
             messages.push({
               uid: msg.uid,

@@ -230,7 +230,12 @@ app.post('/api/push/subscribe', authenticateToken, (req: any, res) => {
     return res.status(400).json({ error: 'Suscripción requerida' });
   }
 
-  saveSubscription(req.user.email, subscription);
+  saveSubscription({
+    endpoint: subscription.endpoint,
+    keys: subscription.keys,
+    email: req.user.email,
+    createdAt: Date.now(),
+  });
   res.json({ success: true });
 });
 

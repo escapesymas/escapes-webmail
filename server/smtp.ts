@@ -24,6 +24,7 @@ export async function sendEmail(options: SendMailOptions): Promise<{ success: bo
     host,
     port,
     secure,
+    name: 'escapesymas.com',
     auth: {
       user: options.user,
       pass: options.pass,
