@@ -8,6 +8,8 @@ import {
   getFolders,
   listMessages,
   getMessage,
+  getAttachment,
+  moveMessage,
   toggleMessageFlag,
   deleteMessage,
 } from './imap.js';
@@ -22,7 +24,8 @@ const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'escapes-webmail-jwt-secret-key-2026';
 
 app.use(cors());
-app.use(express.json());
+// Permitir adjuntos grandes en envíos
+app.use(express.json({ limit: '25mb' }));
 
 // Middleware de autenticación por Token
 interface AuthUser {
@@ -81,14 +84,15 @@ app.get('/api/mail/folders', authenticateToken, async (req: any, res) => {
   }
 });
 
-// Listar correos de una carpeta
+// Listar correos de una carpeta (con soporte de búsqueda)
 app.get('/api/mail/messages', authenticateToken, async (req: any, res) => {
   const folder = (req.query.folder as string) || 'INBOX';
   const page = parseInt(req.query.page as string, 10) || 1;
   const limit = parseInt(req.query.limit as string, 10) || 25;
+  const search = req.query.search ? String(req.query.search) : undefined;
 
   try {
-    const result = await listMessages(req.user.email, req.user.pass, folder, page, limit);
+    const result = await listMessages(req.user.email, req.user.pass, folder, page, limit, search);
     res.json(result);
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'Error al listar mensajes' });
@@ -115,9 +119,49 @@ app.get('/api/mail/message/:uid', authenticateToken, async (req: any, res) => {
   }
 });
 
-// Enviar correo
+// Descargar archivo adjunto
+app.get('/api/mail/message/:uid/attachment/:index', authenticateToken, async (req: any, res) => {
+  const folder = (req.query.folder as string) || 'INBOX';
+  const uid = parseInt(req.params.uid, 10);
+  const index = parseInt(req.params.index, 10);
+
+  if (isNaN(uid) || isNaN(index)) {
+    return res.status(400).json({ error: 'Parámetros inválidos' });
+  }
+
+  try {
+    const att = await getAttachment(req.user.email, req.user.pass, folder, uid, index);
+    if (!att) {
+      return res.status(404).json({ error: 'Adjunto no encontrado' });
+    }
+
+    res.setHeader('Content-Type', att.contentType);
+    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(att.filename)}"`);
+    res.send(att.content);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Error descargando archivo' });
+  }
+});
+
+// Mover correo a otra carpeta
+app.post('/api/mail/move', authenticateToken, async (req: any, res) => {
+  const { sourceFolder, targetFolder, uid } = req.body;
+
+  if (!sourceFolder || !targetFolder || !uid) {
+    return res.status(400).json({ error: 'Parámetros incompletos' });
+  }
+
+  try {
+    const success = await moveMessage(req.user.email, req.user.pass, sourceFolder, targetFolder, parseInt(uid, 10));
+    res.json({ success });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Error al mover mensaje' });
+  }
+});
+
+// Enviar correo (con soporte de adjuntos)
 app.post('/api/mail/send', authenticateToken, async (req: any, res) => {
-  const { to, subject, text, html, replyTo } = req.body;
+  const { to, subject, text, html, replyTo, attachments } = req.body;
 
   if (!to || !subject) {
     return res.status(400).json({ error: 'Destinatario y asunto requeridos' });
@@ -132,6 +176,7 @@ app.post('/api/mail/send', authenticateToken, async (req: any, res) => {
       text,
       html,
       replyTo,
+      attachments,
     });
 
     if (result.success) {
@@ -178,37 +223,15 @@ app.get('/api/push/vapid-key', (req, res) => {
   res.json({ publicKey: getVapidPublicKey() });
 });
 
-// Web Push: Registrar suscripción
+// Web Push: Guardar suscripción
 app.post('/api/push/subscribe', authenticateToken, (req: any, res) => {
-  const subscription = req.body.subscription;
-  if (!subscription || !subscription.endpoint) {
-    return res.status(400).json({ error: 'Suscripción inválida' });
+  const { subscription } = req.body;
+  if (!subscription) {
+    return res.status(400).json({ error: 'Suscripción requerida' });
   }
 
-  saveSubscription({
-    endpoint: subscription.endpoint,
-    keys: subscription.keys,
-    email: req.user.email,
-    createdAt: Date.now(),
-  });
-
+  saveSubscription(req.user.email, subscription);
   res.json({ success: true });
-});
-
-// Webhook para nuevos correos entrantes (llamado por Poste.io o Sieve)
-app.post('/api/mail/webhook/incoming', async (req, res) => {
-  const { to, from, subject, preview } = req.body;
-
-  if (to) {
-    await sendPushNotification(
-      to,
-      `Nuevo correo de ${from || 'remitente'}`,
-      subject || preview || 'Has recibido un nuevo correo.',
-      '/'
-    );
-  }
-
-  res.json({ received: true });
 });
 
 // Servir frontend compilado en producción
@@ -220,5 +243,5 @@ app.get('*', (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`[Escapes Mail] Servidor escuchando en http://localhost:${PORT}`);
+  console.log(`[ESCAPES-WEBMAIL] Servidor corriendo en puerto ${PORT}`);
 });

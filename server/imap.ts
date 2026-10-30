@@ -49,7 +49,7 @@ export function createImapClient(user: string, pass: string): ImapFlow {
     },
     logger: false,
     tls: {
-      rejectUnauthorized: false, // Permite certificados autofirmados o locales en docker
+      rejectUnauthorized: false,
     },
   });
 }
@@ -102,7 +102,8 @@ export async function listMessages(
   pass: string,
   folder = 'INBOX',
   page = 1,
-  limit = 25
+  limit = 25,
+  search?: string
 ): Promise<{ messages: MailSummary[]; total: number }> {
   const client = createImapClient(user, pass);
   await client.connect();
@@ -112,40 +113,93 @@ export async function listMessages(
   try {
     const lock = await client.getMailboxLock(folder);
     try {
-      total = client.mailbox ? client.mailbox.exists : 0;
-      if (total === 0) {
-        return { messages: [], total: 0 };
-      }
+      if (search && search.trim()) {
+        const query = search.trim();
+        // Búsqueda en IMAP por remitente, asunto o cuerpo
+        const uids = await client.search(
+          { or: [{ from: query }, { to: query }, { subject: query }, { body: query }] },
+          { uid: true }
+        );
 
-      const end = Math.max(1, total - (page - 1) * limit);
-      const start = Math.max(1, end - limit + 1);
+        total = uids.length;
+        if (total === 0) {
+          return { messages: [], total: 0 };
+        }
 
-      if (start <= end) {
-        for await (const msg of client.fetch(`${start}:${end}`, {
-          uid: true,
-          envelope: true,
-          flags: true,
-          bodyStructure: true,
-        })) {
-          const fromAddr = msg.envelope?.from?.[0];
-          const toAddr = msg.envelope?.to?.[0];
-          const flags = Array.from(msg.flags || []);
+        // Ordenar UIDs descendente (más nuevos primero)
+        uids.sort((a, b) => b - a);
 
-          messages.push({
-            uid: msg.uid,
-            seq: msg.seq,
-            from: fromAddr?.address || 'Desconocido',
-            fromName: fromAddr?.name,
-            to: toAddr?.address || '',
-            subject: msg.envelope?.subject || '(Sin asunto)',
-            date: msg.envelope?.date ? msg.envelope.date.toISOString() : new Date().toISOString(),
-            flags,
-            unread: !flags.includes('\\Seen'),
-            starred: flags.includes('\\Flagged'),
-            hasAttachments: Boolean(
-              msg.bodyStructure?.childNodes?.some((node) => node.disposition === 'attachment')
-            ),
-          });
+        const startIndex = (page - 1) * limit;
+        const pageUids = uids.slice(startIndex, startIndex + limit);
+
+        if (pageUids.length > 0) {
+          for await (const msg of client.fetch(pageUids.join(','), {
+            uid: true,
+            envelope: true,
+            flags: true,
+            bodyStructure: true,
+          }, { uid: true })) {
+            const fromAddr = msg.envelope?.from?.[0];
+            const toAddr = msg.envelope?.to?.[0];
+            const flags = Array.from(msg.flags || []);
+
+            messages.push({
+              uid: msg.uid,
+              seq: msg.seq,
+              from: fromAddr?.address || 'Desconocido',
+              fromName: fromAddr?.name,
+              to: toAddr?.address || '',
+              subject: msg.envelope?.subject || '(Sin asunto)',
+              date: msg.envelope?.date ? msg.envelope.date.toISOString() : new Date().toISOString(),
+              flags,
+              unread: !flags.includes('\\Seen'),
+              starred: flags.includes('\\Flagged'),
+              hasAttachments: Boolean(
+                msg.bodyStructure?.childNodes?.some((node) => node.disposition === 'attachment')
+              ),
+            });
+          }
+          // Mantener orden descendente
+          messages.sort((a, b) => b.uid - a.uid);
+        }
+      } else {
+        total = client.mailbox ? client.mailbox.exists : 0;
+        if (total === 0) {
+          return { messages: [], total: 0 };
+        }
+
+        const end = Math.max(1, total - (page - 1) * limit);
+        const start = Math.max(1, end - limit + 1);
+
+        if (start <= end) {
+          for await (const msg of client.fetch(`${start}:${end}`, {
+            uid: true,
+            envelope: true,
+            flags: true,
+            bodyStructure: true,
+          })) {
+            const fromAddr = msg.envelope?.from?.[0];
+            const toAddr = msg.envelope?.to?.[0];
+            const flags = Array.from(msg.flags || []);
+
+            messages.push({
+              uid: msg.uid,
+              seq: msg.seq,
+              from: fromAddr?.address || 'Desconocido',
+              fromName: fromAddr?.name,
+              to: toAddr?.address || '',
+              subject: msg.envelope?.subject || '(Sin asunto)',
+              date: msg.envelope?.date ? msg.envelope.date.toISOString() : new Date().toISOString(),
+              flags,
+              unread: !flags.includes('\\Seen'),
+              starred: flags.includes('\\Flagged'),
+              hasAttachments: Boolean(
+                msg.bodyStructure?.childNodes?.some((node) => node.disposition === 'attachment')
+              ),
+            });
+          }
+          // Ordenar los más recientes primero
+          messages.reverse();
         }
       }
     } finally {
@@ -155,8 +209,6 @@ export async function listMessages(
     await client.logout();
   }
 
-  // Ordenar los más recientes primero
-  messages.reverse();
   return { messages, total };
 }
 
@@ -202,6 +254,62 @@ export async function getMessage(
           size: att.size,
         })),
       };
+    } finally {
+      lock.release();
+    }
+  } finally {
+    await client.logout();
+  }
+}
+
+export async function getAttachment(
+  user: string,
+  pass: string,
+  folder: string,
+  uid: number,
+  index: number
+): Promise<{ filename: string; contentType: string; content: Buffer } | null> {
+  const client = createImapClient(user, pass);
+  await client.connect();
+
+  try {
+    const lock = await client.getMailboxLock(folder);
+    try {
+      const msg = await client.download(String(uid), undefined, { uid: true });
+      if (!msg || !msg.content) return null;
+
+      const parsed = await simpleParser(msg.content);
+      const att = parsed.attachments?.[index];
+      if (!att) return null;
+
+      return {
+        filename: att.filename || `adjunto-${index}`,
+        contentType: att.contentType || 'application/octet-stream',
+        content: att.content,
+      };
+    } finally {
+      lock.release();
+    }
+  } finally {
+    await client.logout();
+  }
+}
+
+export async function moveMessage(
+  user: string,
+  pass: string,
+  sourceFolder: string,
+  targetFolder: string,
+  uid: number
+): Promise<boolean> {
+  const client = createImapClient(user, pass);
+  await client.connect();
+
+  try {
+    const lock = await client.getMailboxLock(sourceFolder);
+    try {
+      await client.messageMove(String(uid), targetFolder, { uid: true });
+      return true;
     } finally {
       lock.release();
     }
