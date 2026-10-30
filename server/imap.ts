@@ -176,7 +176,6 @@ export async function getMessage(
       if (!msg || !msg.content) return null;
 
       const parsed = await simpleParser(msg.content);
-      const flags = msg.flags ? Array.from(msg.flags) : [];
 
       // Marcar como visto automáticamente
       await client.messageFlagsAdd(String(uid), ['\\Seen'], { uid: true });
@@ -185,17 +184,17 @@ export async function getMessage(
 
       return {
         uid,
-        seq: msg.seq || 0,
+        seq: 0,
         from: fromAddr?.address || 'Desconocido',
         fromName: fromAddr?.name,
         to: Array.isArray(parsed.to) ? parsed.to.map((t) => t.text).join(', ') : parsed.to?.text || '',
         subject: parsed.subject || '(Sin asunto)',
         date: parsed.date ? parsed.date.toISOString() : new Date().toISOString(),
-        flags,
+        flags: ['\\Seen'],
         unread: false,
-        starred: flags.includes('\\Flagged'),
-        hasAttachments: parsed.attachments && parsed.attachments.length > 0,
-        html: parsed.html || parsed.textAsHtml || undefined,
+        starred: false,
+        hasAttachments: Boolean(parsed.attachments && parsed.attachments.length > 0),
+        html: parsed.html || (typeof parsed.textAsHtml === 'string' ? parsed.textAsHtml : undefined),
         text: parsed.text || undefined,
         attachments: (parsed.attachments || []).map((att) => ({
           filename: att.filename || 'adjunto',
