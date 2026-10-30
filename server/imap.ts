@@ -127,11 +127,9 @@ export async function listMessages(
           return { messages: [], total: 0 };
         }
 
-        // Ordenar UIDs descendente (más nuevos primero)
-        uids.sort((a, b) => b - a);
-
-        const startIndex = (page - 1) * limit;
-        const pageUids = uids.slice(startIndex, startIndex + limit);
+        const isAll = !limit || limit <= 0;
+        const startIndex = isAll ? 0 : (page - 1) * limit;
+        const pageUids = isAll ? uids : uids.slice(startIndex, startIndex + limit);
 
         if (pageUids.length > 0) {
           for await (const msg of client.fetch(pageUids.join(','), {
@@ -169,8 +167,13 @@ export async function listMessages(
           return { messages: [], total: 0 };
         }
 
-        const end = Math.max(1, total - (page - 1) * limit);
-        const start = Math.max(1, end - limit + 1);
+        const isAll = !limit || limit <= 0;
+        let start = 1;
+        let end = total;
+        if (!isAll) {
+          end = Math.max(1, total - (page - 1) * limit);
+          start = Math.max(1, end - limit + 1);
+        }
 
         if (start <= end) {
           for await (const msg of client.fetch(`${start}:${end}`, {
@@ -365,6 +368,72 @@ export async function deleteMessage(
         await client.messageMove(String(uid), 'Trash', { uid: true });
       }
       return true;
+    } finally {
+      lock.release();
+    }
+  } finally {
+    await client.logout();
+  }
+}
+
+export async function batchProcessMessages(
+  user: string,
+  pass: string,
+  folder: string,
+  options: {
+    action: 'delete' | 'read' | 'unread';
+    uids?: number[];
+    allMatching?: boolean;
+    search?: string;
+  }
+): Promise<{ success: boolean; count: number }> {
+  const client = createImapClient(user, pass);
+  await client.connect();
+
+  try {
+    const lock = await client.getMailboxLock(folder);
+    try {
+      let targetUids: number[] = [];
+
+      if (options.allMatching) {
+        if (options.search && options.search.trim()) {
+          const q = options.search.trim();
+          const searchRes = await client.search(
+            { or: [{ from: q }, { to: q }, { subject: q }, { body: q }] },
+            { uid: true }
+          );
+          targetUids = Array.isArray(searchRes) ? searchRes : [];
+        } else {
+          const searchRes = await client.search({ all: true }, { uid: true });
+          targetUids = Array.isArray(searchRes) ? searchRes : [];
+        }
+      } else if (Array.isArray(options.uids) && options.uids.length > 0) {
+        targetUids = options.uids;
+      }
+
+      if (targetUids.length === 0) {
+        return { success: true, count: 0 };
+      }
+
+      const CHUNK_SIZE = 400;
+      for (let i = 0; i < targetUids.length; i += CHUNK_SIZE) {
+        const chunk = targetUids.slice(i, i + CHUNK_SIZE);
+        const seq = chunk.join(',');
+
+        if (options.action === 'delete') {
+          if (folder.toUpperCase() === 'TRASH') {
+            await client.messageDelete(seq, { uid: true });
+          } else {
+            await client.messageMove(seq, 'Trash', { uid: true });
+          }
+        } else if (options.action === 'read') {
+          await client.messageFlagsAdd(seq, ['\\Seen'], { uid: true });
+        } else if (options.action === 'unread') {
+          await client.messageFlagsRemove(seq, ['\\Seen'], { uid: true });
+        }
+      }
+
+      return { success: true, count: targetUids.length };
     } finally {
       lock.release();
     }

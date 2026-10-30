@@ -12,6 +12,7 @@ import {
   moveMessage,
   toggleMessageFlag,
   deleteMessage,
+  batchProcessMessages,
 } from './imap.js';
 import { sendEmail } from './smtp.js';
 import { getVapidPublicKey, saveSubscription, sendPushNotification } from './push.js';
@@ -215,6 +216,27 @@ app.delete('/api/mail/message/:uid', authenticateToken, async (req: any, res) =>
     res.json({ success });
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'Error eliminando mensaje' });
+  }
+});
+
+// Acciones masivas en lote (marcar leídos, no leídos, eliminar o toda la carpeta/búsqueda)
+app.post('/api/mail/batch', authenticateToken, async (req: any, res) => {
+  const { folder, action, uids, allMatching, search } = req.body;
+
+  if (!folder || !action) {
+    return res.status(400).json({ error: 'Carpeta y acción requeridas' });
+  }
+
+  try {
+    const result = await batchProcessMessages(req.user.email, req.user.pass, folder, {
+      action,
+      uids,
+      allMatching: Boolean(allMatching),
+      search,
+    });
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Error al procesar lote de correos' });
   }
 });
 

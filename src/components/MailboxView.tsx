@@ -28,7 +28,9 @@ interface MailboxViewProps {
   onPageChange: (newPage: number) => void;
   searchQuery: string;
   onSearchChange: (q: string) => void;
-  onBatchAction?: (uids: number[], action: 'read' | 'unread' | 'delete') => void;
+  onBatchAction?: (uids: number[], action: 'read' | 'unread' | 'delete', allMatching?: boolean) => void;
+  onLoadMore?: () => void;
+  onLoadAll?: () => void;
 }
 
 export const MailboxView: React.FC<MailboxViewProps> = ({
@@ -45,10 +47,24 @@ export const MailboxView: React.FC<MailboxViewProps> = ({
   searchQuery,
   onSearchChange,
   onBatchAction,
+  onLoadMore,
+  onLoadAll,
 }) => {
   const [localSearch, setLocalSearch] = useState(searchQuery);
   const [selectedUids, setSelectedUids] = useState<number[]>([]);
   const [selectionMode, setSelectionMode] = useState(false);
+  const [selectAllMatching, setSelectAllMatching] = useState(false);
+
+  // Sincronizar búsqueda local
+  React.useEffect(() => {
+    setLocalSearch(searchQuery);
+  }, [searchQuery]);
+
+  // Limpiar selección al cambiar de carpeta o búsqueda
+  React.useEffect(() => {
+    setSelectedUids([]);
+    setSelectAllMatching(false);
+  }, [folderName, searchQuery]);
 
   const limit = 25;
   const totalPages = Math.ceil(total / limit) || 1;
@@ -77,15 +93,18 @@ export const MailboxView: React.FC<MailboxViewProps> = ({
   };
 
   const toggleSelectAll = () => {
-    if (selectedUids.length === messages.length) {
+    if (selectedUids.length === messages.length || selectAllMatching) {
       setSelectedUids([]);
+      setSelectAllMatching(false);
     } else {
       setSelectedUids(messages.map((m) => m.uid));
+      setSelectAllMatching(false);
     }
   };
 
   const toggleSelectUid = (uid: number, e: React.MouseEvent) => {
     e.stopPropagation();
+    setSelectAllMatching(false);
     setSelectedUids((prev) =>
       prev.includes(uid) ? prev.filter((id) => id !== uid) : [...prev, uid]
     );
@@ -107,6 +126,7 @@ export const MailboxView: React.FC<MailboxViewProps> = ({
             onClick={() => {
               setSelectionMode(!selectionMode);
               setSelectedUids([]);
+              setSelectAllMatching(false);
             }}
             className={`p-1.5 rounded-lg text-xs font-medium border transition-colors ${
               selectionMode
@@ -174,34 +194,68 @@ export const MailboxView: React.FC<MailboxViewProps> = ({
 
       {/* Barra de acciones por lote si está activo */}
       {selectionMode && (
-        <div className="p-2 bg-tech-card border-b border-tech-border flex items-center justify-between text-xs text-tech-text shrink-0 animate-fadeIn">
-          <button
-            onClick={toggleSelectAll}
-            className="flex items-center gap-1.5 px-2 py-1 rounded hover:bg-tech-card-hover"
-          >
-            {selectedUids.length === messages.length && messages.length > 0 ? (
-              <CheckSquare className="w-4 h-4 text-tech-yellow" />
-            ) : (
-              <Square className="w-4 h-4 text-tech-muted" />
-            )}
-            <span>{selectedUids.length} seleccionados</span>
-          </button>
+        <div className="flex flex-col shrink-0 animate-fadeIn border-b border-tech-border bg-tech-card">
+          <div className="p-2 flex items-center justify-between text-xs text-tech-text">
+            <button
+              onClick={toggleSelectAll}
+              className="flex items-center gap-1.5 px-2 py-1 rounded hover:bg-tech-card-hover"
+            >
+              {(selectedUids.length === messages.length && messages.length > 0) || selectAllMatching ? (
+                <CheckSquare className="w-4 h-4 text-tech-yellow" />
+              ) : (
+                <Square className="w-4 h-4 text-tech-muted" />
+              )}
+              <span>{selectAllMatching ? total : selectedUids.length} seleccionados</span>
+            </button>
 
-          {selectedUids.length > 0 && onBatchAction && (
-            <div className="flex items-center gap-1">
+            {(selectedUids.length > 0 || selectAllMatching) && onBatchAction && (
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => onBatchAction(selectedUids, 'read', selectAllMatching)}
+                  className="p-1.5 rounded hover:bg-tech-card-hover text-tech-muted hover:text-white flex items-center gap-1"
+                  title="Marcar como leídos"
+                >
+                  <MailOpen className="w-3.5 h-3.5 text-tech-yellow" />
+                </button>
+                <button
+                  onClick={() => onBatchAction(selectedUids, 'delete', selectAllMatching)}
+                  className="p-1.5 rounded hover:bg-tech-card-hover text-red-400 hover:text-red-300 flex items-center gap-1"
+                  title="Enviar a papelera"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Banner de selección masiva estilo Gmail */}
+          {selectedUids.length === messages.length && messages.length > 0 && total > messages.length && !selectAllMatching && (
+            <div className="bg-tech-yellow/10 border-t border-tech-border/50 px-3 py-1.5 text-xs flex items-center justify-between text-zinc-300">
+              <span className="truncate">
+                Seleccionados los {messages.length} cargados.
+              </span>
               <button
-                onClick={() => onBatchAction(selectedUids, 'read')}
-                className="p-1.5 rounded hover:bg-tech-card-hover text-tech-muted hover:text-white flex items-center gap-1"
-                title="Marcar como leídos"
+                type="button"
+                onClick={() => setSelectAllMatching(true)}
+                className="text-tech-yellow hover:underline font-semibold shrink-0 ml-2"
               >
-                <MailOpen className="w-3.5 h-3.5 text-tech-yellow" />
+                Seleccionar todos ({total})
               </button>
+            </div>
+          )}
+
+          {selectAllMatching && (
+            <div className="bg-tech-yellow/15 border-t border-tech-yellow/30 px-3 py-1.5 text-xs flex items-center justify-between text-tech-yellow font-medium">
+              <span>✓ Todos los {total} correos seleccionados</span>
               <button
-                onClick={() => onBatchAction(selectedUids, 'delete')}
-                className="p-1.5 rounded hover:bg-tech-card-hover text-red-400 hover:text-red-300 flex items-center gap-1"
-                title="Enviar a papelera"
+                type="button"
+                onClick={() => {
+                  setSelectAllMatching(false);
+                  setSelectedUids([]);
+                }}
+                className="text-white hover:underline text-xs shrink-0 ml-2"
               >
-                <Trash2 className="w-3.5 h-3.5" />
+                Cancelar
               </button>
             </div>
           )}
@@ -312,6 +366,37 @@ export const MailboxView: React.FC<MailboxViewProps> = ({
               </div>
             );
           })
+        )}
+
+        {/* Botones de Cargar Más y Cargar Todos */}
+        {messages.length > 0 && messages.length < total && (
+          <div className="p-4 flex flex-col items-center justify-center gap-2.5 bg-tech-card/20 border-t border-tech-border/30">
+            <span className="text-xs text-tech-muted">
+              Mostrando <strong className="text-white">{messages.length}</strong> de <strong className="text-white">{total}</strong> correos
+            </span>
+            <div className="flex items-center gap-2 w-full max-w-xs">
+              {onLoadMore && (
+                <button
+                  type="button"
+                  disabled={loading}
+                  onClick={onLoadMore}
+                  className="flex-1 py-2 px-3 bg-tech-card border border-tech-border rounded-xl text-xs font-medium text-white hover:bg-tech-card-hover hover:border-tech-yellow/50 transition-colors disabled:opacity-50"
+                >
+                  {loading ? 'Cargando...' : '+50 más'}
+                </button>
+              )}
+              {onLoadAll && (
+                <button
+                  type="button"
+                  disabled={loading}
+                  onClick={onLoadAll}
+                  className="flex-1 py-2 px-3 bg-tech-yellow/10 border border-tech-yellow/40 rounded-xl text-xs font-semibold text-tech-yellow hover:bg-tech-yellow hover:text-black transition-colors disabled:opacity-50"
+                >
+                  {loading ? 'Cargando...' : `Cargar todos (${total})`}
+                </button>
+              )}
+            </div>
+          </div>
         )}
       </div>
     </div>

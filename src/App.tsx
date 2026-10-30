@@ -110,13 +110,19 @@ export default function App() {
     }
   };
 
-  // Cargar lista de correos
-  const fetchMessages = async (folder = currentFolder, targetPage = page, query = searchQuery) => {
+  // Cargar lista de correos con soporte de paginación o carga continua
+  const fetchMessages = async (
+    folder = currentFolder,
+    targetPage = page,
+    query = searchQuery,
+    append = false,
+    limit = 50
+  ) => {
     if (!token) return;
     setLoadingList(true);
 
     try {
-      let url = `/api/mail/messages?folder=${encodeURIComponent(folder)}&page=${targetPage}&limit=25`;
+      let url = `/api/mail/messages?folder=${encodeURIComponent(folder)}&page=${targetPage}&limit=${limit}`;
       if (query.trim()) {
         url += `&search=${encodeURIComponent(query.trim())}`;
       }
@@ -131,7 +137,15 @@ export default function App() {
       }
 
       const data = await res.json();
-      setMessages(data.messages || []);
+      if (append) {
+        setMessages((prev) => {
+          const existingUids = new Set(prev.map((m) => m.uid));
+          const newUnique = (data.messages || []).filter((m: MailSummary) => !existingUids.has(m.uid));
+          return [...prev, ...newUnique];
+        });
+      } else {
+        setMessages(data.messages || []);
+      }
       setTotal(data.total || 0);
     } catch (err) {
       console.error('Error cargando mensajes:', err);
@@ -140,10 +154,20 @@ export default function App() {
     }
   };
 
+  const handleLoadMore = () => {
+    const nextPage = page + 1;
+    setPage(nextPage);
+    fetchMessages(currentFolder, nextPage, searchQuery, true, 50);
+  };
+
+  const handleLoadAll = () => {
+    fetchMessages(currentFolder, 1, searchQuery, false, 0);
+  };
+
   useEffect(() => {
     if (token) {
       fetchFolders();
-      fetchMessages(currentFolder, page, searchQuery);
+      fetchMessages(currentFolder, page, searchQuery, false, 50);
     }
   }, [token, currentFolder, page, searchQuery]);
 
@@ -225,43 +249,49 @@ export default function App() {
     }
   };
 
-  // Acciones en lote (batch)
-  const handleBatchAction = async (uids: number[], action: 'read' | 'unread' | 'delete') => {
-    if (!token || uids.length === 0) return;
+  // Acciones en lote (batch masivo ultrarrápido)
+  const handleBatchAction = async (uids: number[], action: 'read' | 'unread' | 'delete', allMatching = false) => {
+    if (!token) return;
+    const targetCount = allMatching ? total : uids.length;
+    if (targetCount === 0) return;
 
-    if (action === 'delete' && !confirm(`¿Deseas enviar ${uids.length} correos a la papelera?`)) {
+    const actionText =
+      action === 'delete'
+        ? `enviar ${targetCount} correo(s) a la papelera`
+        : `marcar ${targetCount} correo(s) como ${action === 'read' ? 'leídos' : 'no leídos'}`;
+
+    if (action === 'delete' && !confirm(`¿Deseas ${actionText}?`)) {
       return;
     }
 
     try {
-      if (action === 'delete') {
-        for (const uid of uids) {
-          await fetch(`/api/mail/message/${uid}?folder=${encodeURIComponent(currentFolder)}`, {
-            method: 'DELETE',
-            headers: { Authorization: `Bearer ${token}` },
-          });
-        }
-        setMessages((prev) => prev.filter((m) => !uids.includes(m.uid)));
-        setTotal((t) => Math.max(0, t - uids.length));
-      } else {
-        const flag = '\\Seen';
-        const add = action === 'read';
-        for (const uid of uids) {
-          await fetch('/api/mail/flag', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${token}`,
-            },
-            body: JSON.stringify({ folder: currentFolder, uid, flag, add }),
-          });
-        }
-        setMessages((prev) =>
-          prev.map((m) => (uids.includes(m.uid) ? { ...m, unread: !add } : m))
-        );
-      }
-    } catch (err) {
+      setLoadingList(true);
+      const res = await fetch('/api/mail/batch', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          folder: currentFolder,
+          action,
+          uids,
+          allMatching,
+          search: searchQuery.trim() || undefined,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Error procesando lote');
+
+      // Refrescar lista limpia
+      setPage(1);
+      await fetchMessages(currentFolder, 1, searchQuery, false, 50);
+    } catch (err: any) {
       console.error(err);
+      alert(err.message || 'Error en la acción masiva');
+    } finally {
+      setLoadingList(false);
     }
   };
 
@@ -543,6 +573,8 @@ export default function App() {
               setPage(1);
             }}
             onBatchAction={handleBatchAction}
+            onLoadMore={handleLoadMore}
+            onLoadAll={handleLoadAll}
           />
         </div>
 
