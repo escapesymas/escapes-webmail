@@ -97,13 +97,31 @@ export async function getFolders(user: string, pass: string): Promise<MailboxFol
   return folders;
 }
 
+export type SearchField = 'all' | 'from' | 'subject' | 'body';
+
+function buildImapSearchQuery(search: string, searchField: SearchField = 'all') {
+  const q = search.trim();
+  switch (searchField) {
+    case 'from':
+      return { from: q };
+    case 'subject':
+      return { subject: q };
+    case 'body':
+      return { body: q };
+    case 'all':
+    default:
+      return { or: [{ from: q }, { to: q }, { subject: q }, { body: q }] };
+  }
+}
+
 export async function listMessages(
   user: string,
   pass: string,
   folder = 'INBOX',
   page = 1,
   limit = 25,
-  search?: string
+  search?: string,
+  searchField: SearchField = 'all'
 ): Promise<{ messages: MailSummary[]; total: number }> {
   const client = createImapClient(user, pass);
   await client.connect();
@@ -114,12 +132,8 @@ export async function listMessages(
     const lock = await client.getMailboxLock(folder);
     try {
       if (search && search.trim()) {
-        const query = search.trim();
-        // Búsqueda en IMAP por remitente, asunto o cuerpo
-        const searchRes = await client.search(
-          { or: [{ from: query }, { to: query }, { subject: query }, { body: query }] },
-          { uid: true }
-        );
+        const query = buildImapSearchQuery(search, searchField);
+        const searchRes = await client.search(query, { uid: true });
 
         const uids: number[] = Array.isArray(searchRes) ? searchRes : [];
         total = uids.length;
@@ -385,6 +399,7 @@ export async function batchProcessMessages(
     uids?: number[];
     allMatching?: boolean;
     search?: string;
+    searchField?: SearchField;
   }
 ): Promise<{ success: boolean; count: number }> {
   const client = createImapClient(user, pass);
@@ -397,11 +412,8 @@ export async function batchProcessMessages(
 
       if (options.allMatching) {
         if (options.search && options.search.trim()) {
-          const q = options.search.trim();
-          const searchRes = await client.search(
-            { or: [{ from: q }, { to: q }, { subject: q }, { body: q }] },
-            { uid: true }
-          );
+          const query = buildImapSearchQuery(options.search, options.searchField || 'all');
+          const searchRes = await client.search(query, { uid: true });
           targetUids = Array.isArray(searchRes) ? searchRes : [];
         } else {
           const searchRes = await client.search({ all: true }, { uid: true });

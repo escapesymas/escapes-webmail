@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Sidebar } from './components/Sidebar';
 import { MobileNav } from './components/MobileNav';
-import { MailboxView, MailSummary } from './components/MailboxView';
+import { MailboxView, MailSummary, SearchField } from './components/MailboxView';
 import { MessageDetail, MailDetail } from './components/MessageDetail';
 import { ComposeModal } from './components/ComposeModal';
 import { LoginView } from './components/LoginView';
@@ -38,6 +38,7 @@ export default function App() {
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
+  const [searchField, setSearchField] = useState<SearchField>('all');
 
   const [isComposeOpen, setIsComposeOpen] = useState(false);
   const [replyDraft, setReplyDraft] = useState<{ to?: string; subject?: string } | undefined>();
@@ -110,13 +111,14 @@ export default function App() {
     }
   };
 
-  // Cargar lista de correos con soporte de paginación o carga continua
+  // Cargar lista de correos con soporte de paginación o carga continua y filtro de campo
   const fetchMessages = async (
     folder = currentFolder,
     targetPage = page,
     query = searchQuery,
     append = false,
-    limit = 50
+    limit = 50,
+    field = searchField
   ) => {
     if (!token) return;
     setLoadingList(true);
@@ -124,7 +126,7 @@ export default function App() {
     try {
       let url = `/api/mail/messages?folder=${encodeURIComponent(folder)}&page=${targetPage}&limit=${limit}`;
       if (query.trim()) {
-        url += `&search=${encodeURIComponent(query.trim())}`;
+        url += `&search=${encodeURIComponent(query.trim())}&searchField=${field}`;
       }
 
       const res = await fetch(url, {
@@ -157,19 +159,19 @@ export default function App() {
   const handleLoadMore = () => {
     const nextPage = page + 1;
     setPage(nextPage);
-    fetchMessages(currentFolder, nextPage, searchQuery, true, 50);
+    fetchMessages(currentFolder, nextPage, searchQuery, true, 50, searchField);
   };
 
   const handleLoadAll = () => {
-    fetchMessages(currentFolder, 1, searchQuery, false, 0);
+    fetchMessages(currentFolder, 1, searchQuery, false, 0, searchField);
   };
 
   useEffect(() => {
     if (token) {
       fetchFolders();
-      fetchMessages(currentFolder, page, searchQuery, false, 50);
+      fetchMessages(currentFolder, page, searchQuery, false, 50, searchField);
     }
-  }, [token, currentFolder, page, searchQuery]);
+  }, [token, currentFolder, page, searchQuery, searchField]);
 
   // Cargar detalle de un mensaje
   const handleSelectMessage = async (uid: number) => {
@@ -278,6 +280,7 @@ export default function App() {
           uids,
           allMatching,
           search: searchQuery.trim() || undefined,
+          searchField,
         }),
       });
 
@@ -286,7 +289,7 @@ export default function App() {
 
       // Refrescar lista limpia
       setPage(1);
-      await fetchMessages(currentFolder, 1, searchQuery, false, 50);
+      await fetchMessages(currentFolder, 1, searchQuery, false, 50, searchField);
     } catch (err: any) {
       console.error(err);
       alert(err.message || 'Error en la acción masiva');
@@ -666,8 +669,14 @@ export default function App() {
             total={total}
             onPageChange={setPage}
             searchQuery={searchQuery}
-            onSearchChange={(q) => {
+            searchField={searchField}
+            onSearchChange={(q, field) => {
+              if (field) setSearchField(field);
               setSearchQuery(q);
+              setPage(1);
+            }}
+            onSearchFieldChange={(field) => {
+              setSearchField(field);
               setPage(1);
             }}
             onBatchAction={handleBatchAction}

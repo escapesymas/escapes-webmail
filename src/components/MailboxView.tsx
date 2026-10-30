@@ -195,6 +195,8 @@ const MailItem: React.FC<MailItemProps> = ({
   );
 };
 
+export type SearchField = 'all' | 'from' | 'subject' | 'body';
+
 interface MailboxViewProps {
   messages: MailSummary[];
   loading: boolean;
@@ -207,7 +209,9 @@ interface MailboxViewProps {
   total: number;
   onPageChange: (newPage: number) => void;
   searchQuery: string;
-  onSearchChange: (q: string) => void;
+  searchField?: SearchField;
+  onSearchChange: (q: string, field?: SearchField) => void;
+  onSearchFieldChange?: (field: SearchField) => void;
   onBatchAction?: (uids: number[], action: 'read' | 'unread' | 'delete', allMatching?: boolean) => void;
   onLoadMore?: () => void;
   onLoadAll?: () => void;
@@ -230,7 +234,9 @@ export const MailboxView: React.FC<MailboxViewProps> = ({
   total,
   onPageChange,
   searchQuery,
+  searchField = 'all',
   onSearchChange,
+  onSearchFieldChange,
   onBatchAction,
   onLoadMore,
   onLoadAll,
@@ -239,15 +245,20 @@ export const MailboxView: React.FC<MailboxViewProps> = ({
   onSwipeToggleRead,
 }) => {
   const [localSearch, setLocalSearch] = useState(searchQuery);
+  const [selectedField, setSelectedField] = useState<SearchField>(searchField);
   const [selectedUids, setSelectedUids] = useState<number[]>([]);
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectAllMatching, setSelectAllMatching] = useState(false);
   const [filterMode, setFilterMode] = useState<FilterMode>('all');
 
-  // Sincronizar búsqueda local
+  // Sincronizar búsqueda local y campo
   React.useEffect(() => {
     setLocalSearch(searchQuery);
   }, [searchQuery]);
+
+  React.useEffect(() => {
+    if (searchField) setSelectedField(searchField);
+  }, [searchField]);
 
   // Limpiar selección al cambiar de carpeta o búsqueda
   React.useEffect(() => {
@@ -275,12 +286,34 @@ export const MailboxView: React.FC<MailboxViewProps> = ({
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onSearchChange(localSearch);
+    onSearchChange(localSearch, selectedField);
   };
 
   const handleClearSearch = () => {
     setLocalSearch('');
-    onSearchChange('');
+    onSearchChange('', selectedField);
+  };
+
+  const handleFieldChange = (field: SearchField) => {
+    setSelectedField(field);
+    if (onSearchFieldChange) onSearchFieldChange(field);
+    if (localSearch.trim()) {
+      onSearchChange(localSearch.trim(), field);
+    }
+  };
+
+  const getSearchPlaceholder = () => {
+    switch (selectedField) {
+      case 'from':
+        return 'Buscar por remitente...';
+      case 'subject':
+        return 'Buscar en el asunto...';
+      case 'body':
+        return 'Buscar en el contenido del mensaje...';
+      case 'all':
+      default:
+        return 'Buscar en todo el correo...';
+    }
   };
 
   const toggleSelectAll = () => {
@@ -393,15 +426,15 @@ export const MailboxView: React.FC<MailboxViewProps> = ({
         </div>
       </div>
 
-      {/* Barra de búsqueda */}
-      <form onSubmit={handleSearchSubmit} className="p-2 border-b border-tech-border bg-tech-card/30 shrink-0">
+      {/* Barra de búsqueda con selector de campo */}
+      <form onSubmit={handleSearchSubmit} className="p-2 border-b border-tech-border bg-tech-card/30 shrink-0 space-y-1.5">
         <div className="relative flex items-center">
           <Search className="w-4 h-4 text-tech-muted absolute left-3 pointer-events-none" />
           <input
             type="text"
             value={localSearch}
             onChange={(e) => setLocalSearch(e.target.value)}
-            placeholder="Buscar por remitente, asunto..."
+            placeholder={getSearchPlaceholder()}
             className="w-full bg-tech-carbon border border-tech-border rounded-xl pl-9 pr-8 py-2 text-xs text-tech-text placeholder:text-zinc-500 focus:outline-none focus:border-tech-yellow transition-colors"
           />
           {localSearch && (
@@ -413,6 +446,37 @@ export const MailboxView: React.FC<MailboxViewProps> = ({
               <X className="w-3.5 h-3.5" />
             </button>
           )}
+        </div>
+
+        {/* Selector de campo: Todo, Remitente, Asunto, Contenido */}
+        <div className="flex items-center gap-1.5 px-0.5 text-xs">
+          <span className="text-[10px] text-zinc-500 uppercase font-bold shrink-0">
+            En:
+          </span>
+          <div className="flex items-center gap-1 overflow-x-auto no-scrollbar">
+            {[
+              { id: 'all', label: 'Todo' },
+              { id: 'from', label: 'Remitente' },
+              { id: 'subject', label: 'Asunto' },
+              { id: 'body', label: 'Contenido' },
+            ].map((f) => {
+              const active = selectedField === f.id;
+              return (
+                <button
+                  key={f.id}
+                  type="button"
+                  onClick={() => handleFieldChange(f.id as SearchField)}
+                  className={`px-2 py-0.5 rounded-lg text-[11px] font-medium transition-colors ${
+                    active
+                      ? 'bg-tech-yellow text-black font-semibold shadow-sm'
+                      : 'text-tech-muted hover:text-white bg-tech-carbon border border-tech-border/50 hover:border-tech-border'
+                  }`}
+                >
+                  {f.label}
+                </button>
+              );
+            })}
+          </div>
         </div>
       </form>
 

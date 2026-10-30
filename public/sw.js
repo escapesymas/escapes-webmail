@@ -1,5 +1,5 @@
 // Service Worker para Escapes Mail PWA
-const SW_VERSION = 'v1.0.5';
+const SW_VERSION = 'v1.0.6';
 const CACHE_NAME = `escapes-mail-${SW_VERSION}`;
 
 self.addEventListener('install', (event) => {

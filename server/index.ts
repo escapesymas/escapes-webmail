@@ -86,15 +86,16 @@ app.get('/api/mail/folders', authenticateToken, async (req: any, res) => {
   }
 });
 
-// Listar correos de una carpeta (con soporte de búsqueda)
+// Listar correos de una carpeta (con soporte de búsqueda y filtro por campo)
 app.get('/api/mail/messages', authenticateToken, async (req: any, res) => {
   const folder = (req.query.folder as string) || 'INBOX';
   const page = parseInt(req.query.page as string, 10) || 1;
   const limit = parseInt(req.query.limit as string, 10) || 25;
   const search = req.query.search ? String(req.query.search) : undefined;
+  const searchField = (req.query.searchField as any) || 'all';
 
   try {
-    const result = await listMessages(req.user.email, req.user.pass, folder, page, limit, search);
+    const result = await listMessages(req.user.email, req.user.pass, folder, page, limit, search, searchField);
     res.json(result);
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'Error al listar mensajes' });
@@ -222,7 +223,7 @@ app.delete('/api/mail/message/:uid', authenticateToken, async (req: any, res) =>
 
 // Acciones masivas en lote (marcar leídos, no leídos, eliminar o toda la carpeta/búsqueda)
 app.post('/api/mail/batch', authenticateToken, async (req: any, res) => {
-  const { folder, action, uids, allMatching, search } = req.body;
+  const { folder, action, uids, allMatching, search, searchField } = req.body;
 
   if (!folder || !action) {
     return res.status(400).json({ error: 'Carpeta y acción requeridas' });
@@ -234,6 +235,7 @@ app.post('/api/mail/batch', authenticateToken, async (req: any, res) => {
       uids,
       allMatching: Boolean(allMatching),
       search,
+      searchField,
     });
     res.json(result);
   } catch (err: any) {
