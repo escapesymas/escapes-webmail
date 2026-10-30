@@ -342,6 +342,104 @@ export default function App() {
     }
   };
 
+  // Vaciar papelera o spam definitivamente
+  const handleEmptyFolder = async (folder: string) => {
+    if (!token) return;
+    try {
+      setLoadingList(true);
+      const res = await fetch('/api/mail/empty-folder', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ folder }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Error al vaciar carpeta');
+      showToast(`✓ Se han eliminado ${data.count} correo(s) definitivamente`);
+      setMessages([]);
+      setTotal(0);
+      setSelectedUid(null);
+      setCurrentDetail(null);
+    } catch (err: any) {
+      alert(err.message || 'Error al vaciar carpeta');
+    } finally {
+      setLoadingList(false);
+    }
+  };
+
+  // Acción de swipe en móvil: enviar a papelera
+  const handleSwipeDelete = async (uid: number) => {
+    if (!token) return;
+    try {
+      setMessages((prev) => prev.filter((m) => m.uid !== uid));
+      setTotal((t) => Math.max(0, t - 1));
+      showToast('✓ Correo enviado a la papelera');
+      await fetch(`/api/mail/message/${uid}?folder=${encodeURIComponent(currentFolder)}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  // Acción de swipe en móvil: alternar leído/no leído
+  const handleSwipeToggleRead = async (uid: number, currentlyUnread: boolean) => {
+    if (!token) return;
+    const newUnread = !currentlyUnread;
+    setMessages((prev) =>
+      prev.map((m) => (m.uid === uid ? { ...m, unread: newUnread } : m))
+    );
+    showToast(newUnread ? 'Marcado como no leído' : 'Marcado como leído');
+    try {
+      await fetch('/api/mail/flag', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          folder: currentFolder,
+          uid,
+          flag: '\\Seen',
+          add: !newUnread,
+        }),
+      });
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  // Indexar remitentes frecuentes en localStorage para autocompletado
+  useEffect(() => {
+    if (messages.length > 0) {
+      try {
+        const stored = localStorage.getItem('escapes_mail_contacts');
+        const list = stored ? JSON.parse(stored) : [];
+        const map = new Map(list.map((c: any) => [c.email.toLowerCase(), c]));
+        messages.forEach((m) => {
+          if (m.from && m.from.includes('@')) {
+            const cleanEmail = m.from.replace(/.*<(.+)>/, '$1').trim();
+            if (!map.has(cleanEmail.toLowerCase())) {
+              map.set(cleanEmail.toLowerCase(), {
+                email: cleanEmail,
+                name: m.fromName || cleanEmail.split('@')[0],
+              });
+            }
+          }
+        });
+        localStorage.setItem(
+          'escapes_mail_contacts',
+          JSON.stringify(Array.from(map.values()).slice(0, 150))
+        );
+      } catch {
+        // Ignorar
+      }
+    }
+  }, [messages]);
+
   // Responder
   const handleReply = (detail: MailDetail) => {
     setReplyDraft({
@@ -575,6 +673,9 @@ export default function App() {
             onBatchAction={handleBatchAction}
             onLoadMore={handleLoadMore}
             onLoadAll={handleLoadAll}
+            onEmptyFolder={handleEmptyFolder}
+            onSwipeDelete={handleSwipeDelete}
+            onSwipeToggleRead={handleSwipeToggleRead}
           />
         </div>
 
@@ -597,6 +698,8 @@ export default function App() {
             onDownloadAttachment={handleDownloadAttachment}
             onMoveToFolder={handleMoveToFolder}
             availableFolders={availableFolders}
+            currentFolder={currentFolder}
+            token={token}
           />
         </div>
       </div>

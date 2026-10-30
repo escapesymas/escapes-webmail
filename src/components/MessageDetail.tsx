@@ -1,5 +1,18 @@
 import React, { useState } from 'react';
-import { ArrowLeft, Trash2, Reply, Paperclip, Star, MailOpen, Download, FolderInput, ShieldAlert } from 'lucide-react';
+import {
+  ArrowLeft,
+  Trash2,
+  Reply,
+  Paperclip,
+  Star,
+  MailOpen,
+  Download,
+  FolderInput,
+  ShieldAlert,
+  Eye,
+  X,
+  ExternalLink,
+} from 'lucide-react';
 
 export interface MailDetail {
   uid: number;
@@ -28,6 +41,8 @@ interface MessageDetailProps {
   onDownloadAttachment: (index: number, filename: string) => void;
   onMoveToFolder?: (targetFolder: string) => void;
   availableFolders?: string[];
+  currentFolder?: string;
+  token?: string | null;
 }
 
 export const MessageDetail: React.FC<MessageDetailProps> = ({
@@ -40,9 +55,19 @@ export const MessageDetail: React.FC<MessageDetailProps> = ({
   onDownloadAttachment,
   onMoveToFolder,
   availableFolders = ['INBOX', 'Alibaba', 'GM2', 'SumUp', 'Spam', 'Trash'],
+  currentFolder = 'INBOX',
+  token,
 }) => {
   const [showImages, setShowImages] = useState(false);
   const [showMoveMenu, setShowMoveMenu] = useState(false);
+  const [previewAttachment, setPreviewAttachment] = useState<{
+    index: number;
+    filename: string;
+    contentType: string;
+    url: string;
+    isPdf: boolean;
+    isImage: boolean;
+  } | null>(null);
 
   if (loading) {
     return (
@@ -73,11 +98,40 @@ export const MessageDetail: React.FC<MessageDetailProps> = ({
     }
   };
 
+  const isImageFile = (filename: string, ct = '') =>
+    ct.startsWith('image/') || /\.(jpg|jpeg|png|webp|gif|svg)$/i.test(filename);
+
+  const isPdfFile = (filename: string, ct = '') =>
+    ct === 'application/pdf' || /\.pdf$/i.test(filename);
+
+  const handlePreviewAttachment = (index: number, filename: string, contentType: string) => {
+    const isImage = isImageFile(filename, contentType);
+    const isPdf = isPdfFile(filename, contentType);
+
+    if (!isImage && !isPdf) {
+      onDownloadAttachment(index, filename);
+      return;
+    }
+
+    const url = `/api/mail/message/${message.uid}/attachment/${index}?folder=${encodeURIComponent(
+      currentFolder
+    )}&token=${encodeURIComponent(token || '')}`;
+
+    setPreviewAttachment({
+      index,
+      filename,
+      contentType,
+      url,
+      isPdf,
+      isImage,
+    });
+  };
+
   // Detectar si el html contiene imágenes externas que podrían ser rastreadores
   const hasExternalImages = Boolean(message.html && message.html.includes('<img'));
 
   return (
-    <div className="flex-1 flex flex-col h-full bg-tech-card overflow-hidden">
+    <div className="flex-1 flex flex-col h-full bg-tech-card overflow-hidden relative">
       {/* Barra de herramientas con soporte Safe Area iOS */}
       <div className="pt-header-safe px-3 pb-3 border-b border-tech-border flex items-center justify-between bg-tech-card/80 shrink-0">
         <div className="flex items-center gap-2">
@@ -102,23 +156,22 @@ export const MessageDetail: React.FC<MessageDetailProps> = ({
           </button>
         </div>
 
-        <div className="flex items-center gap-2 relative">
+        <div className="flex items-center gap-1.5">
           {/* Mover a carpeta */}
           {onMoveToFolder && (
             <div className="relative">
               <button
                 onClick={() => setShowMoveMenu(!showMoveMenu)}
-                className="p-2 rounded-xl text-tech-muted hover:text-white hover:bg-tech-card-hover transition-colors flex items-center gap-1.5 text-xs font-medium"
+                className="p-2 rounded-xl text-tech-muted hover:text-white hover:bg-tech-card-hover transition-colors"
                 title="Mover a otra carpeta"
               >
-                <FolderInput className="w-4 h-4 text-tech-yellow" />
-                <span className="hidden sm:inline">Mover</span>
+                <FolderInput className="w-4 h-4" />
               </button>
 
               {showMoveMenu && (
-                <div className="absolute right-0 mt-2 w-48 bg-tech-carbon border border-tech-border rounded-xl shadow-2xl py-1.5 z-50 animate-fadeIn">
-                  <div className="px-3 py-1 text-[11px] font-semibold uppercase text-tech-muted border-b border-tech-border/50">
-                    Mover mensaje a:
+                <div className="absolute right-0 top-full mt-1.5 w-44 bg-tech-card border border-tech-border rounded-xl shadow-xl py-1 z-30 animate-fadeIn">
+                  <div className="px-3 py-1.5 text-[10px] uppercase font-bold text-tech-muted border-b border-tech-border/50">
+                    Mover a carpeta
                   </div>
                   {availableFolders.map((f) => (
                     <button
@@ -127,7 +180,7 @@ export const MessageDetail: React.FC<MessageDetailProps> = ({
                         onMoveToFolder(f);
                         setShowMoveMenu(false);
                       }}
-                      className="w-full text-left px-3 py-2 text-xs text-tech-text hover:bg-tech-card-hover hover:text-tech-yellow transition-colors capitalize"
+                      className="w-full text-left px-3 py-2 text-xs text-tech-text hover:bg-tech-card-hover hover:text-tech-yellow capitalize transition-colors"
                     >
                       {f}
                     </button>
@@ -139,42 +192,54 @@ export const MessageDetail: React.FC<MessageDetailProps> = ({
 
           <button
             onClick={() => onReply(message)}
-            className="px-3 py-1.5 rounded-xl bg-tech-carbon border border-tech-border hover:border-tech-yellow/50 text-tech-text hover:text-white text-xs font-semibold flex items-center gap-1.5 transition-colors"
+            className="p-2 rounded-xl text-tech-muted hover:text-white hover:bg-tech-card-hover transition-colors flex items-center gap-1.5"
             title="Responder"
           >
-            <Reply className="w-4 h-4 text-tech-yellow" />
-            <span>Responder</span>
+            <Reply className="w-4 h-4" />
+            <span className="text-xs hidden sm:inline">Responder</span>
           </button>
 
           <button
-            onClick={() => onDelete(message.uid)}
-            className="p-2 rounded-xl text-tech-muted hover:text-red-400 hover:bg-red-950/20 transition-colors"
-            title="Enviar a la papelera"
+            onClick={() => {
+              if (confirm('¿Deseas enviar este correo a la papelera?')) {
+                onDelete(message.uid);
+              }
+            }}
+            className="p-2 rounded-xl text-tech-muted hover:text-red-400 hover:bg-tech-card-hover transition-colors"
+            title="Enviar a papelera"
           >
             <Trash2 className="w-4 h-4" />
           </button>
         </div>
       </div>
 
-      {/* Contenido con scroll */}
-      <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6 pb-28 md:pb-6">
-        {/* Cabecera del mensaje */}
+      {/* Contenido del correo */}
+      <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 pb-24 md:pb-6">
+        {/* Cabecera del correo */}
         <div>
-          <h1 className="text-lg sm:text-xl font-bold text-white mb-3 leading-snug">
-            {message.subject}
+          <h1 className="text-lg sm:text-xl font-bold text-white mb-3">
+            {message.subject || '(Sin asunto)'}
           </h1>
 
-          <div className="flex items-start justify-between gap-4 p-3 rounded-xl bg-tech-carbon/60 border border-tech-border/60">
-            <div className="overflow-hidden">
-              <span className="text-sm font-semibold text-white block truncate">
-                {message.fromName ? `${message.fromName} <${message.from}>` : message.from}
-              </span>
-              <span className="text-xs text-tech-muted block truncate mt-0.5">
-                Para: {message.to}
-              </span>
+          <div className="flex items-start justify-between gap-4 pb-4 border-b border-tech-border/50 text-xs">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-full bg-tech-yellow/10 border border-tech-yellow/30 flex items-center justify-center text-tech-yellow font-bold text-sm shrink-0">
+                {(message.fromName || message.from).charAt(0).toUpperCase()}
+              </div>
+              <div className="min-w-0">
+                <span className="font-semibold text-white block truncate">
+                  {message.fromName || message.from}
+                </span>
+                <span className="text-tech-muted truncate block">
+                  De: {message.from}
+                </span>
+                <span className="text-zinc-500 truncate block">
+                  Para: {message.to}
+                </span>
+              </div>
             </div>
 
-            <span className="text-xs text-tech-muted shrink-0 mt-0.5">
+            <span className="text-tech-muted shrink-0 text-right">
               {formatFullDate(message.date)}
             </span>
           </div>
@@ -196,7 +261,7 @@ export const MessageDetail: React.FC<MessageDetailProps> = ({
           </div>
         )}
 
-        {/* Archivos adjuntos */}
+        {/* Archivos adjuntos con visor integrado */}
         {message.attachments && message.attachments.length > 0 && (
           <div className="space-y-2">
             <h4 className="text-xs font-semibold uppercase text-tech-muted flex items-center gap-1.5">
@@ -204,32 +269,52 @@ export const MessageDetail: React.FC<MessageDetailProps> = ({
               <span>Archivos adjuntos ({message.attachments.length})</span>
             </h4>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {message.attachments.map((att, idx) => (
-                <div
-                  key={idx}
-                  onClick={() => onDownloadAttachment(idx, att.filename)}
-                  className="p-3 rounded-xl bg-tech-carbon border border-tech-border hover:border-tech-yellow/50 text-xs text-zinc-200 flex items-center justify-between gap-3 cursor-pointer transition-all hover:shadow-md group"
-                >
-                  <div className="flex items-center gap-2.5 overflow-hidden">
-                    <Paperclip className="w-4 h-4 text-tech-yellow shrink-0" />
-                    <div className="overflow-hidden">
-                      <span className="font-semibold block truncate group-hover:text-tech-yellow transition-colors">
-                        {att.filename}
-                      </span>
-                      <span className="text-[10px] text-tech-muted">
-                        {Math.round(att.size / 1024)} KB
-                      </span>
+              {message.attachments.map((att, idx) => {
+                const isImg = isImageFile(att.filename, att.contentType);
+                const isPdf = isPdfFile(att.filename, att.contentType);
+                const canPreview = isImg || isPdf;
+
+                return (
+                  <div
+                    key={idx}
+                    className="p-3 rounded-xl bg-tech-carbon border border-tech-border hover:border-tech-yellow/50 text-xs text-zinc-200 flex items-center justify-between gap-3 transition-all hover:shadow-md group"
+                  >
+                    <div
+                      onClick={() => handlePreviewAttachment(idx, att.filename, att.contentType)}
+                      className="flex items-center gap-2.5 overflow-hidden flex-1 cursor-pointer"
+                    >
+                      <Paperclip className="w-4 h-4 text-tech-yellow shrink-0" />
+                      <div className="overflow-hidden">
+                        <span className="font-semibold block truncate group-hover:text-tech-yellow transition-colors">
+                          {att.filename}
+                        </span>
+                        <span className="text-[10px] text-tech-muted">
+                          {Math.round(att.size / 1024)} KB {canPreview ? (isPdf ? '• PDF' : '• Imagen') : ''}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-1 shrink-0">
+                      {canPreview && (
+                        <button
+                          onClick={() => handlePreviewAttachment(idx, att.filename, att.contentType)}
+                          className="p-1.5 rounded-lg bg-tech-card text-tech-muted hover:text-tech-yellow transition-colors"
+                          title="Previsualizar"
+                        >
+                          <Eye className="w-4 h-4" />
+                        </button>
+                      )}
+                      <button
+                        onClick={() => onDownloadAttachment(idx, att.filename)}
+                        className="p-1.5 rounded-lg bg-tech-card text-tech-muted hover:text-tech-yellow transition-colors"
+                        title="Descargar archivo"
+                      >
+                        <Download className="w-4 h-4" />
+                      </button>
                     </div>
                   </div>
-
-                  <button
-                    className="p-1.5 rounded-lg bg-tech-card text-tech-muted group-hover:text-tech-yellow transition-colors shrink-0"
-                    title="Descargar archivo"
-                  >
-                    <Download className="w-4 h-4" />
-                  </button>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         )}
@@ -250,6 +335,64 @@ export const MessageDetail: React.FC<MessageDetailProps> = ({
           )}
         </div>
       </div>
+
+      {/* Modal Visor Integrado de Adjuntos (PDF e Imágenes) */}
+      {previewAttachment && (
+        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex flex-col p-2 sm:p-6 animate-fadeIn">
+          {/* Cabecera del visor */}
+          <div className="flex items-center justify-between bg-tech-card/90 px-4 py-3 rounded-t-2xl border border-tech-border text-white shrink-0">
+            <div className="flex items-center gap-2 overflow-hidden mr-3">
+              <Paperclip className="w-4 h-4 text-tech-yellow shrink-0" />
+              <span className="text-xs sm:text-sm font-semibold truncate">
+                {previewAttachment.filename}
+              </span>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0">
+              <a
+                href={previewAttachment.url}
+                target="_blank"
+                rel="noreferrer"
+                className="p-1.5 rounded-lg bg-tech-carbon border border-tech-border text-tech-muted hover:text-white"
+                title="Abrir en pestaña nueva"
+              >
+                <ExternalLink className="w-4 h-4" />
+              </a>
+              <button
+                onClick={() => onDownloadAttachment(previewAttachment.index, previewAttachment.filename)}
+                className="p-1.5 rounded-lg bg-tech-carbon border border-tech-border text-tech-muted hover:text-tech-yellow"
+                title="Descargar"
+              >
+                <Download className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => setPreviewAttachment(null)}
+                className="p-1.5 rounded-lg bg-tech-carbon border border-tech-border text-tech-muted hover:text-white"
+                title="Cerrar visor"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+
+          {/* Área de visualización */}
+          <div className="flex-1 bg-tech-carbon/90 border-x border-b border-tech-border rounded-b-2xl overflow-hidden flex items-center justify-center p-2">
+            {previewAttachment.isImage ? (
+              <img
+                src={previewAttachment.url}
+                alt={previewAttachment.filename}
+                className="max-h-[82vh] max-w-full object-contain rounded-lg shadow-2xl"
+              />
+            ) : previewAttachment.isPdf ? (
+              <iframe
+                src={previewAttachment.url}
+                title={previewAttachment.filename}
+                className="w-full h-full rounded-lg border-0 bg-white"
+              />
+            ) : null}
+          </div>
+        </div>
+      )}
     </div>
   );
 };

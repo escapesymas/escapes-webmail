@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { Mail, Star, Paperclip, RefreshCw, ChevronLeft, ChevronRight, Search, X, CheckSquare, Square, Trash2, MailOpen } from 'lucide-react';
 
 export interface MailSummary {
@@ -14,6 +14,186 @@ export interface MailSummary {
   starred: boolean;
   hasAttachments: boolean;
 }
+
+interface MailItemProps {
+  msg: MailSummary;
+  isSelected: boolean;
+  isChecked: boolean;
+  selectionMode: boolean;
+  onSelectMessage: (uid: number) => void;
+  onToggleUid: (uid: number, e: React.MouseEvent) => void;
+  onToggleStar: (uid: number, starred: boolean) => void;
+  onSwipeDelete?: (uid: number) => void;
+  onSwipeToggleRead?: (uid: number, currentlyUnread: boolean) => void;
+  formatDate: (dateStr: string) => string;
+}
+
+const MailItem: React.FC<MailItemProps> = ({
+  msg,
+  isSelected,
+  isChecked,
+  selectionMode,
+  onSelectMessage,
+  onToggleUid,
+  onToggleStar,
+  onSwipeDelete,
+  onSwipeToggleRead,
+  formatDate,
+}) => {
+  const [offsetX, setOffsetX] = useState(0);
+  const [swiping, setSwiping] = useState(false);
+  const touchStartXRef = useRef<number | null>(null);
+  const touchStartYRef = useRef<number | null>(null);
+  const isHorizontalSwipeRef = useRef<boolean | null>(null);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (selectionMode) return;
+    const touch = e.touches[0];
+    touchStartXRef.current = touch.clientX;
+    touchStartYRef.current = touch.clientY;
+    isHorizontalSwipeRef.current = null;
+    setSwiping(true);
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (touchStartXRef.current === null || touchStartYRef.current === null) return;
+    const touch = e.touches[0];
+    const deltaX = touch.clientX - touchStartXRef.current;
+    const deltaY = touch.clientY - touchStartYRef.current;
+
+    if (isHorizontalSwipeRef.current === null) {
+      if (Math.abs(deltaX) > 8 || Math.abs(deltaY) > 8) {
+        isHorizontalSwipeRef.current = Math.abs(deltaX) > Math.abs(deltaY);
+      }
+    }
+
+    if (isHorizontalSwipeRef.current) {
+      const clamped = Math.max(-110, Math.min(110, deltaX));
+      setOffsetX(clamped);
+    }
+  };
+
+  const handleTouchEnd = () => {
+    if (isHorizontalSwipeRef.current && Math.abs(offsetX) > 65) {
+      if (offsetX < -65 && onSwipeDelete) {
+        onSwipeDelete(msg.uid);
+      } else if (offsetX > 65 && onSwipeToggleRead) {
+        onSwipeToggleRead(msg.uid, msg.unread);
+      }
+    }
+    setOffsetX(0);
+    setSwiping(false);
+    touchStartXRef.current = null;
+    touchStartYRef.current = null;
+    isHorizontalSwipeRef.current = null;
+  };
+
+  return (
+    <div className="relative overflow-hidden bg-tech-carbon select-none">
+      {/* Fondo de acción al deslizar a la derecha (Leído/No leído) */}
+      {offsetX > 0 && (
+        <div className="absolute inset-y-0 left-0 w-full bg-tech-yellow/20 flex items-center px-4 text-tech-yellow font-semibold text-xs gap-2">
+          {msg.unread ? <MailOpen className="w-4 h-4" /> : <Mail className="w-4 h-4" />}
+          <span>{msg.unread ? 'Marcar leído' : 'Marcar no leído'}</span>
+        </div>
+      )}
+
+      {/* Fondo de acción al deslizar a la izquierda (Papelera) */}
+      {offsetX < 0 && (
+        <div className="absolute inset-y-0 right-0 w-full bg-red-600/30 flex items-center justify-end px-4 text-red-400 font-semibold text-xs gap-2">
+          <span>Papelera</span>
+          <Trash2 className="w-4 h-4" />
+        </div>
+      )}
+
+      {/* Fila del correo */}
+      <div
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        onClick={() => {
+          if (selectionMode) {
+            onToggleUid(msg.uid, { stopPropagation: () => {} } as any);
+          } else {
+            onSelectMessage(msg.uid);
+          }
+        }}
+        style={{
+          transform: `translateX(${offsetX}px)`,
+          transition: swiping ? 'none' : 'transform 0.22s cubic-bezier(0.2, 0.8, 0.2, 1)',
+        }}
+        className={`relative z-10 p-3.5 sm:px-4 cursor-pointer flex items-start gap-3 bg-tech-carbon transition-colors ${
+          isSelected
+            ? 'bg-tech-yellow/10 border-l-2 border-tech-yellow'
+            : msg.unread
+            ? 'bg-tech-card hover:bg-tech-card-hover font-semibold text-white'
+            : 'hover:bg-tech-card/60 text-tech-muted'
+        }`}
+      >
+        {selectionMode ? (
+          <button
+            type="button"
+            onClick={(e) => onToggleUid(msg.uid, e)}
+            className="mt-0.5 text-tech-muted hover:text-tech-yellow transition-colors shrink-0"
+          >
+            {isChecked ? (
+              <CheckSquare className="w-4 h-4 text-tech-yellow" />
+            ) : (
+              <Square className="w-4 h-4 text-zinc-600" />
+            )}
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleStar(msg.uid, !msg.starred);
+            }}
+            className="mt-0.5 text-tech-muted hover:text-tech-yellow transition-colors shrink-0"
+          >
+            <Star
+              className={`w-4 h-4 ${
+                msg.starred ? 'fill-tech-yellow text-tech-yellow' : 'text-zinc-600'
+              }`}
+            />
+          </button>
+        )}
+
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center justify-between gap-2 mb-1">
+            <span
+              className={`text-sm truncate ${
+                msg.unread ? 'text-white font-bold' : 'text-zinc-300'
+              }`}
+            >
+              {msg.fromName || msg.from}
+            </span>
+            <span className="text-xs text-tech-muted shrink-0">
+              {formatDate(msg.date)}
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <h3
+              className={`text-sm truncate ${
+                msg.unread ? 'text-white' : 'text-tech-muted'
+              }`}
+            >
+              {msg.subject}
+            </h3>
+            {msg.hasAttachments && (
+              <Paperclip className="w-3.5 h-3.5 text-tech-yellow/70 shrink-0" />
+            )}
+          </div>
+        </div>
+
+        {msg.unread && (
+          <span className="w-2 h-2 rounded-full bg-tech-yellow mt-2 shrink-0 shadow-sm shadow-tech-yellow" />
+        )}
+      </div>
+    </div>
+  );
+};
 
 interface MailboxViewProps {
   messages: MailSummary[];
@@ -31,7 +211,12 @@ interface MailboxViewProps {
   onBatchAction?: (uids: number[], action: 'read' | 'unread' | 'delete', allMatching?: boolean) => void;
   onLoadMore?: () => void;
   onLoadAll?: () => void;
+  onEmptyFolder?: (folder: string) => void;
+  onSwipeDelete?: (uid: number) => void;
+  onSwipeToggleRead?: (uid: number, currentlyUnread: boolean) => void;
 }
+
+type FilterMode = 'all' | 'unread' | 'attachments' | 'starred';
 
 export const MailboxView: React.FC<MailboxViewProps> = ({
   messages,
@@ -49,11 +234,15 @@ export const MailboxView: React.FC<MailboxViewProps> = ({
   onBatchAction,
   onLoadMore,
   onLoadAll,
+  onEmptyFolder,
+  onSwipeDelete,
+  onSwipeToggleRead,
 }) => {
   const [localSearch, setLocalSearch] = useState(searchQuery);
   const [selectedUids, setSelectedUids] = useState<number[]>([]);
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectAllMatching, setSelectAllMatching] = useState(false);
+  const [filterMode, setFilterMode] = useState<FilterMode>('all');
 
   // Sincronizar búsqueda local
   React.useEffect(() => {
@@ -68,6 +257,8 @@ export const MailboxView: React.FC<MailboxViewProps> = ({
 
   const limit = 25;
   const totalPages = Math.ceil(total / limit) || 1;
+
+  const isTrashOrSpam = ['trash', 'papelera', 'spam', 'junk'].includes(folderName.toLowerCase());
 
   const formatDate = (dateStr: string) => {
     try {
@@ -110,6 +301,27 @@ export const MailboxView: React.FC<MailboxViewProps> = ({
     );
   };
 
+  const handleEmptyFolderClick = () => {
+    if (!onEmptyFolder) return;
+    if (
+      confirm(
+        `¿Estás seguro de que deseas vaciar definitivamente todos los correos de "${folderName}"? Esta acción no se puede deshacer.`
+      )
+    ) {
+      onEmptyFolder(folderName);
+    }
+  };
+
+  // Filtrado rápido cliente
+  const filteredMessages = messages.filter((m) => {
+    if (filterMode === 'unread') return m.unread;
+    if (filterMode === 'attachments') return m.hasAttachments;
+    if (filterMode === 'starred') return m.starred;
+    return true;
+  });
+
+  const unreadCount = messages.filter((m) => m.unread).length;
+
   return (
     <div className="flex-1 flex flex-col h-full bg-tech-carbon overflow-hidden">
       {/* Barra superior de carpeta y paginación con soporte Safe Area iOS */}
@@ -122,6 +334,18 @@ export const MailboxView: React.FC<MailboxViewProps> = ({
         </div>
 
         <div className="flex items-center gap-1.5">
+          {/* Botón Vaciar Papelera / Spam */}
+          {isTrashOrSpam && total > 0 && onEmptyFolder && (
+            <button
+              onClick={handleEmptyFolderClick}
+              className="p-1.5 px-2 rounded-lg text-xs font-semibold text-red-400 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 flex items-center gap-1 transition-colors"
+              title={`Vaciar definitivamente ${folderName}`}
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Vaciar</span>
+            </button>
+          )}
+
           <button
             onClick={() => {
               setSelectionMode(!selectionMode);
@@ -191,6 +415,67 @@ export const MailboxView: React.FC<MailboxViewProps> = ({
           )}
         </div>
       </form>
+
+      {/* Filtros rápidos (Chips de 1 toque) */}
+      <div className="px-3 py-1.5 border-b border-tech-border/50 bg-tech-card/20 flex items-center gap-1.5 overflow-x-auto no-scrollbar shrink-0">
+        <button
+          type="button"
+          onClick={() => setFilterMode('all')}
+          className={`px-2.5 py-1 rounded-lg text-xs font-medium whitespace-nowrap transition-colors ${
+            filterMode === 'all'
+              ? 'bg-tech-yellow text-black font-semibold'
+              : 'text-tech-muted hover:text-white hover:bg-tech-card'
+          }`}
+        >
+          Todos
+        </button>
+        <button
+          type="button"
+          onClick={() => setFilterMode('unread')}
+          className={`px-2.5 py-1 rounded-lg text-xs font-medium whitespace-nowrap transition-colors flex items-center gap-1.5 ${
+            filterMode === 'unread'
+              ? 'bg-tech-yellow text-black font-semibold'
+              : 'text-tech-muted hover:text-white hover:bg-tech-card'
+          }`}
+        >
+          <span>No leídos</span>
+          {unreadCount > 0 && (
+            <span
+              className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                filterMode === 'unread'
+                  ? 'bg-black text-tech-yellow'
+                  : 'bg-tech-yellow/20 text-tech-yellow'
+              }`}
+            >
+              {unreadCount}
+            </span>
+          )}
+        </button>
+        <button
+          type="button"
+          onClick={() => setFilterMode('attachments')}
+          className={`px-2.5 py-1 rounded-lg text-xs font-medium whitespace-nowrap transition-colors flex items-center gap-1 ${
+            filterMode === 'attachments'
+              ? 'bg-tech-yellow text-black font-semibold'
+              : 'text-tech-muted hover:text-white hover:bg-tech-card'
+          }`}
+        >
+          <Paperclip className="w-3 h-3" />
+          <span>Con adjuntos</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setFilterMode('starred')}
+          className={`px-2.5 py-1 rounded-lg text-xs font-medium whitespace-nowrap transition-colors flex items-center gap-1 ${
+            filterMode === 'starred'
+              ? 'bg-tech-yellow text-black font-semibold'
+              : 'text-tech-muted hover:text-white hover:bg-tech-card'
+          }`}
+        >
+          <Star className="w-3 h-3" />
+          <span>Destacados</span>
+        </button>
+      </div>
 
       {/* Barra de acciones por lote si está activo */}
       {selectionMode && (
@@ -262,110 +547,40 @@ export const MailboxView: React.FC<MailboxViewProps> = ({
         </div>
       )}
 
-      {/* Lista de mensajes */}
+      {/* Lista de mensajes con soporte de Swipe táctil en móvil */}
       <div className="flex-1 overflow-y-auto divide-y divide-tech-border/50 pb-24 md:pb-0">
         {loading && messages.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-64 text-tech-muted gap-3">
             <div className="w-6 h-6 border-2 border-tech-yellow border-t-transparent rounded-full animate-spin" />
             <span className="text-sm">Buscando correos...</span>
           </div>
-        ) : messages.length === 0 ? (
+        ) : filteredMessages.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-64 text-tech-muted gap-2">
             <Mail className="w-8 h-8 opacity-30 text-tech-yellow" />
             <span className="text-sm">
-              {searchQuery ? 'No se encontraron resultados para la búsqueda' : 'No hay correos en esta carpeta'}
+              {searchQuery
+                ? 'No se encontraron resultados para la búsqueda'
+                : filterMode !== 'all'
+                ? 'No hay correos que coincidan con este filtro'
+                : 'No hay correos en esta carpeta'}
             </span>
           </div>
         ) : (
-          messages.map((msg) => {
-            const isSelected = selectedUid === msg.uid;
-            const isChecked = selectedUids.includes(msg.uid);
-
-            return (
-              <div
-                key={msg.uid}
-                onClick={() => {
-                  if (selectionMode) {
-                    toggleSelectUid(msg.uid, { stopPropagation: () => {} } as any);
-                  } else {
-                    onSelectMessage(msg.uid);
-                  }
-                }}
-                className={`p-3.5 sm:px-4 cursor-pointer flex items-start gap-3 transition-colors ${
-                  isSelected
-                    ? 'bg-tech-yellow/10 border-l-2 border-tech-yellow'
-                    : msg.unread
-                    ? 'bg-tech-card hover:bg-tech-card-hover font-semibold text-white'
-                    : 'hover:bg-tech-card/60 text-tech-muted'
-                }`}
-              >
-                {/* Casilla de selección si está activo el modo */}
-                {selectionMode ? (
-                  <button
-                    type="button"
-                    onClick={(e) => toggleSelectUid(msg.uid, e)}
-                    className="mt-0.5 text-tech-muted hover:text-tech-yellow transition-colors shrink-0"
-                  >
-                    {isChecked ? (
-                      <CheckSquare className="w-4 h-4 text-tech-yellow" />
-                    ) : (
-                      <Square className="w-4 h-4 text-zinc-600" />
-                    )}
-                  </button>
-                ) : (
-                  /* Estrella */
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onToggleStar(msg.uid, !msg.starred);
-                    }}
-                    className="mt-0.5 text-tech-muted hover:text-tech-yellow transition-colors shrink-0"
-                  >
-                    <Star
-                      className={`w-4 h-4 ${
-                        msg.starred ? 'fill-tech-yellow text-tech-yellow' : 'text-zinc-600'
-                      }`}
-                    />
-                  </button>
-                )}
-
-                {/* Contenido del correo */}
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between gap-2 mb-1">
-                    <span
-                      className={`text-sm truncate ${
-                        msg.unread ? 'text-white font-bold' : 'text-zinc-300'
-                      }`}
-                    >
-                      {msg.fromName || msg.from}
-                    </span>
-                    <span className="text-xs text-tech-muted shrink-0">
-                      {formatDate(msg.date)}
-                    </span>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <h3
-                      className={`text-sm truncate ${
-                        msg.unread ? 'text-white' : 'text-tech-muted'
-                      }`}
-                    >
-                      {msg.subject}
-                    </h3>
-                    {msg.hasAttachments && (
-                      <Paperclip className="w-3.5 h-3.5 text-tech-yellow/70 shrink-0" />
-                    )}
-                  </div>
-                </div>
-
-                {/* Indicador de no leído */}
-                {msg.unread && (
-                  <span className="w-2 h-2 rounded-full bg-tech-yellow mt-2 shrink-0 shadow-sm shadow-tech-yellow" />
-                )}
-              </div>
-            );
-          })
+          filteredMessages.map((msg) => (
+            <MailItem
+              key={msg.uid}
+              msg={msg}
+              isSelected={selectedUid === msg.uid}
+              isChecked={selectedUids.includes(msg.uid)}
+              selectionMode={selectionMode}
+              onSelectMessage={onSelectMessage}
+              onToggleUid={toggleSelectUid}
+              onToggleStar={onToggleStar}
+              onSwipeDelete={onSwipeDelete}
+              onSwipeToggleRead={onSwipeToggleRead}
+              formatDate={formatDate}
+            />
+          ))
         )}
 
         {/* Botones de Cargar Más y Cargar Todos */}

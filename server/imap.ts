@@ -441,3 +441,37 @@ export async function batchProcessMessages(
     await client.logout();
   }
 }
+
+export async function emptyFolder(
+  user: string,
+  pass: string,
+  folder: string
+): Promise<{ success: boolean; count: number }> {
+  const client = createImapClient(user, pass);
+  await client.connect();
+
+  try {
+    const lock = await client.getMailboxLock(folder);
+    try {
+      const searchRes = await client.search({ all: true }, { uid: true });
+      const targetUids = Array.isArray(searchRes) ? searchRes : [];
+
+      if (targetUids.length === 0) {
+        return { success: true, count: 0 };
+      }
+
+      const CHUNK_SIZE = 400;
+      for (let i = 0; i < targetUids.length; i += CHUNK_SIZE) {
+        const chunk = targetUids.slice(i, i + CHUNK_SIZE);
+        const seq = chunk.join(',');
+        await client.messageDelete(seq, { uid: true });
+      }
+
+      return { success: true, count: targetUids.length };
+    } finally {
+      lock.release();
+    }
+  } finally {
+    await client.logout();
+  }
+}

@@ -13,6 +13,7 @@ import {
   toggleMessageFlag,
   deleteMessage,
   batchProcessMessages,
+  emptyFolder,
 } from './imap.js';
 import { sendEmail } from './smtp.js';
 import { getVapidPublicKey, saveSubscription, sendPushNotification } from './push.js';
@@ -36,7 +37,7 @@ interface AuthUser {
 
 function authenticateToken(req: any, res: any, next: any) {
   const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
+  const token = (authHeader && authHeader.split(' ')[1]) || (req.query.token as string);
 
   if (!token) {
     return res.status(401).json({ error: 'Sesión no iniciada' });
@@ -237,6 +238,21 @@ app.post('/api/mail/batch', authenticateToken, async (req: any, res) => {
     res.json(result);
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'Error al procesar lote de correos' });
+  }
+});
+
+// Vaciar carpeta permanentemente (Papelera, Spam)
+app.post('/api/mail/empty-folder', authenticateToken, async (req: any, res) => {
+  const { folder } = req.body;
+  if (!folder) {
+    return res.status(400).json({ error: 'Carpeta requerida' });
+  }
+
+  try {
+    const result = await emptyFolder(req.user.email, req.user.pass, folder);
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Error al vaciar la carpeta' });
   }
 });
 
