@@ -5,6 +5,7 @@ import { MailboxView, MailSummary, SearchField } from './components/MailboxView'
 import { MessageDetail, MailDetail } from './components/MessageDetail';
 import { ComposeModal } from './components/ComposeModal';
 import { LoginView } from './components/LoginView';
+import { ErrorBoundary } from './components/ErrorBoundary';
 
 interface SavedAccount {
   email: string;
@@ -694,22 +695,29 @@ export default function App() {
             selectedUid ? 'flex' : 'hidden md:flex'
           }`}
         >
-          <MessageDetail
-            message={currentDetail}
-            loading={loadingDetail}
-            onBack={() => {
+          <ErrorBoundary
+            onReset={() => {
               setSelectedUid(null);
               setCurrentDetail(null);
             }}
-            onDelete={handleDeleteMessage}
-            onReply={handleReply}
-            onToggleStar={handleToggleStar}
-            onDownloadAttachment={handleDownloadAttachment}
-            onMoveToFolder={handleMoveToFolder}
-            availableFolders={availableFolders}
-            currentFolder={currentFolder}
-            token={token}
-          />
+          >
+            <MessageDetail
+              message={currentDetail}
+              loading={loadingDetail}
+              onBack={() => {
+                setSelectedUid(null);
+                setCurrentDetail(null);
+              }}
+              onDelete={handleDeleteMessage}
+              onReply={handleReply}
+              onToggleStar={handleToggleStar}
+              onDownloadAttachment={handleDownloadAttachment}
+              onMoveToFolder={handleMoveToFolder}
+              availableFolders={availableFolders}
+              currentFolder={currentFolder}
+              token={token}
+            />
+          </ErrorBoundary>
         </div>
       </div>
 

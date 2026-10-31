@@ -123,6 +123,15 @@ export const MessageDetail: React.FC<MessageDetailProps> = ({
     isImage: boolean;
   } | null>(null);
 
+  // Detección automática de códigos de verificación OTP (Hook SIEMPRE al inicio, antes de returns condicionales)
+  const otpCode = React.useMemo(() => {
+    if (!message) return null;
+    return extractOtpCode(message.subject, message.text || '', message.html || '');
+  }, [message?.subject, message?.text, message?.html]);
+
+  // Detectar si el html contiene imágenes externas que podrían ser rastreadores
+  const hasExternalImages = Boolean(message?.html && message.html.includes('<img'));
+
   if (loading) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center h-full bg-tech-card">
@@ -188,6 +197,8 @@ export const MessageDetail: React.FC<MessageDetailProps> = ({
       return;
     }
 
+    if (!message) return;
+
     const url = `/api/mail/message/${message.uid}/attachment/${index}?folder=${encodeURIComponent(
       currentFolder
     )}&token=${encodeURIComponent(token || '')}`;
@@ -201,15 +212,6 @@ export const MessageDetail: React.FC<MessageDetailProps> = ({
       isImage,
     });
   };
-
-  // Detectar si el html contiene imágenes externas que podrían ser rastreadores
-  const hasExternalImages = Boolean(message.html && message.html.includes('<img'));
-
-  // Detección automática de códigos de verificación OTP
-  const otpCode = React.useMemo(() => {
-    if (!message) return null;
-    return extractOtpCode(message.subject, message.text || '', message.html || '');
-  }, [message]);
 
   const handleCopyOtp = async () => {
     if (!otpCode) return;
