@@ -17,6 +17,7 @@ import {
 } from './imap.js';
 import { sendEmail } from './smtp.js';
 import { getVapidPublicKey, saveSubscription, sendPushNotification } from './push.js';
+import { formatSenderNotification, formatSubjectNotification } from './mime.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -293,13 +294,15 @@ app.post('/api/push/incoming-notify', async (req, res) => {
   }
 
   const cleanTo = String(to).replace(/[<>]/g, '').trim().toLowerCase();
-  const cleanFrom = String(from || 'Nuevo correo').replace(/[\r\n]/g, '').trim();
-  const cleanSubject = String(subject || '(Sin asunto)').replace(/[\r\n]/g, '').trim();
+  const title = formatSenderNotification(from);
+  const body = formatSubjectNotification(subject);
+
+  console.log(`[PUSH] Notificando correo entrante para ${cleanTo}: "${title}" - "${body}"`);
 
   const result = await sendPushNotification(
     cleanTo,
-    cleanFrom,
-    cleanSubject,
+    title,
+    body,
     '/'
   );
 
