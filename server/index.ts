@@ -295,7 +295,14 @@ app.post('/api/push/incoming-notify', async (req, res) => {
 
   const cleanTo = String(to).replace(/[<>]/g, '').trim().toLowerCase();
   const title = formatSenderNotification(from);
-  const body = formatSubjectNotification(subject);
+  let body = formatSubjectNotification(subject);
+
+  // Si el correo es de verificación y contiene un código en el asunto, destacarlo para la pantalla de bloqueo
+  const isAuth = /c[oó]digo|code|verific|auth|pin|otp|seguridad|security/i.test(`${title} ${body}`);
+  const otpMatch = body.match(/\b([0-9]{4,8}|[A-Z0-9]{5,8})\b/);
+  if (isAuth && otpMatch && !/^202[0-9]$/.test(otpMatch[1])) {
+    body = `🔑 Código: ${otpMatch[1]} • ${body}`;
+  }
 
   console.log(`[PUSH] Notificando correo entrante para ${cleanTo}: "${title}" - "${body}"`);
 

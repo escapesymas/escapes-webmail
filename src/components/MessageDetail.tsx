@@ -12,6 +12,9 @@ import {
   Eye,
   X,
   ExternalLink,
+  Copy,
+  Check,
+  Key,
 } from 'lucide-react';
 
 export interface MailDetail {
@@ -45,6 +48,56 @@ interface MessageDetailProps {
   token?: string | null;
 }
 
+function isCommonFalsePositive(str: string): boolean {
+  const upper = str.toUpperCase();
+  if (/^202[0-9]$/.test(upper)) return true;
+  if (/^(TRUE|FALSE|NULL|HTML|HTTP|HTTPS|TIKTOK|GOOGLE|GITHUB|STRIPE|AMAZON|ACCESS|CENTER|ONLINE|PORTAL|VERIFY)$/.test(upper)) return true;
+  return false;
+}
+
+export function extractOtpCode(subject = '', text = '', html = ''): string | null {
+  const cleanSubject = subject || '';
+  const plainHtml = (html || '').replace(/<[^>]+>/g, ' ');
+  const combined = `${cleanSubject}\n${text || ''}\n${plainHtml}`;
+
+  // Verificar si el correo es de autenticación, verificación o seguridad
+  const isAuthContext = /c[oó]digo|code|verific|auth|pin\b|otp\b|seguridad|security|login|acceso|confirmaci[oó]n|password|contrase[ñn]a/i.test(
+    `${cleanSubject} ${text.slice(0, 500)}`
+  );
+  if (!isAuthContext) return null;
+
+  // 1. Patrón explícito cercano a palabras clave: "código: 123456", "code is F6PB2F"
+  const explicitRegexes = [
+    /(?:c[oó]digo(?:\s+de\s+verificaci[oó]n|\s+de\s+seguridad|\s+de\s+acceso)?|verification\s+code|security\s+code|access\s+code|login\s+code|c[oó]digo|code|pin|otp)\s*(?:es|is|:|=|:)?\s*[:\s#]*([A-Z0-9]{4,8})\b/i,
+  ];
+
+  for (const rx of explicitRegexes) {
+    const m = combined.match(rx);
+    if (m && m[1]) {
+      const c = m[1].trim();
+      if (!isCommonFalsePositive(c)) return c;
+    }
+  }
+
+  // 2. Líneas aisladas que contengan solo un código de 4 a 8 caracteres (como en TikTok F6PB2F)
+  const lines = (text || '').split('\n').map((l) => l.trim()).filter(Boolean);
+  for (const line of lines) {
+    if (/^[A-Z0-9]{4,8}$/i.test(line)) {
+      if (!isCommonFalsePositive(line)) return line.toUpperCase();
+    }
+    const splitNum = line.match(/^([0-9]{3}[-\s][0-9]{3})$/);
+    if (splitNum) return splitNum[1].replace(/\s+/, '-');
+  }
+
+  // 3. Buscar 6 dígitos numéricos típicos en el asunto o inicio del texto
+  const digitsMatch = `${cleanSubject}\n${(text || '').slice(0, 800)}`.match(/\b([0-9]{6})\b/);
+  if (digitsMatch && !isCommonFalsePositive(digitsMatch[1])) {
+    return digitsMatch[1];
+  }
+
+  return null;
+}
+
 export const MessageDetail: React.FC<MessageDetailProps> = ({
   message,
   loading,
@@ -60,6 +113,7 @@ export const MessageDetail: React.FC<MessageDetailProps> = ({
 }) => {
   const [showImages, setShowImages] = useState(false);
   const [showMoveMenu, setShowMoveMenu] = useState(false);
+  const [copiedOtp, setCopiedOtp] = useState(false);
   const [previewAttachment, setPreviewAttachment] = useState<{
     index: number;
     filename: string;
@@ -150,6 +204,37 @@ export const MessageDetail: React.FC<MessageDetailProps> = ({
 
   // Detectar si el html contiene imágenes externas que podrían ser rastreadores
   const hasExternalImages = Boolean(message.html && message.html.includes('<img'));
+
+  // Detección automática de códigos de verificación OTP
+  const otpCode = React.useMemo(() => {
+    if (!message) return null;
+    return extractOtpCode(message.subject, message.text || '', message.html || '');
+  }, [message]);
+
+  const handleCopyOtp = async () => {
+    if (!otpCode) return;
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(otpCode);
+      } else {
+        throw new Error('Clipboard API no disponible');
+      }
+      setCopiedOtp(true);
+      setTimeout(() => setCopiedOtp(false), 2500);
+    } catch {
+      const ta = document.createElement('textarea');
+      ta.value = otpCode;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+      setCopiedOtp(true);
+      setTimeout(() => setCopiedOtp(false), 2500);
+    }
+  };
 
   return (
     <div className="flex-1 flex flex-col h-full bg-tech-card overflow-hidden w-full max-w-full min-w-0 relative">
@@ -275,16 +360,52 @@ export const MessageDetail: React.FC<MessageDetailProps> = ({
           </div>
         </div>
 
-        {/* Aviso de imágenes externas */}
+        {/* Banner de Código de Verificación OTP con botón de copia rápida */}
+        {otpCode && (
+          <div className="p-3 sm:p-3.5 rounded-2xl bg-tech-yellow/10 border border-tech-yellow/40 flex items-center justify-between gap-3 text-xs animate-fadeIn shadow-lg shadow-tech-yellow/5">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="w-8 h-8 rounded-xl bg-tech-yellow/20 flex items-center justify-center shrink-0">
+                <Key className="w-4 h-4 text-tech-yellow" />
+              </div>
+              <div className="min-w-0">
+                <div className="text-zinc-400 text-[10px] uppercase font-bold tracking-wider">
+                  Código de verificación
+                </div>
+                <div className="text-white font-mono font-bold text-base sm:text-lg tracking-widest truncate select-all">
+                  {otpCode}
+                </div>
+              </div>
+            </div>
+            <button
+              onClick={handleCopyOtp}
+              className="px-3.5 py-2 rounded-xl bg-tech-yellow text-black font-bold text-xs flex items-center gap-1.5 shadow-md hover:bg-yellow-400 active:scale-95 transition-all shrink-0"
+              title="Copiar código al portapapeles"
+            >
+              {copiedOtp ? (
+                <>
+                  <Check className="w-4 h-4 text-black stroke-[3]" />
+                  <span>¡Copiado!</span>
+                </>
+              ) : (
+                <>
+                  <Copy className="w-4 h-4 text-black" />
+                  <span>Copiar</span>
+                </>
+              )}
+            </button>
+          </div>
+        )}
+
+        {/* Aviso de imágenes externas compacto */}
         {hasExternalImages && !showImages && (
-          <div className="p-3 rounded-xl bg-tech-carbon border border-tech-border flex items-center justify-between gap-3 text-xs text-tech-muted">
-            <div className="flex items-center gap-2">
+          <div className="py-2 px-3 rounded-xl bg-tech-carbon border border-tech-border flex items-center justify-between gap-2 text-xs text-tech-muted">
+            <div className="flex items-center gap-2 min-w-0">
               <ShieldAlert className="w-4 h-4 text-tech-yellow shrink-0" />
-              <span>Por privacidad, las imágenes remotas no se muestran automáticamente.</span>
+              <span className="truncate">Imágenes externas bloqueadas</span>
             </div>
             <button
               onClick={() => setShowImages(true)}
-              className="px-2.5 py-1 rounded-lg bg-tech-card hover:bg-tech-card-hover text-tech-yellow font-semibold shrink-0 border border-tech-border transition-colors"
+              className="px-2.5 py-1 rounded-lg bg-tech-card hover:bg-tech-card-hover text-tech-yellow font-semibold shrink-0 border border-tech-border transition-colors text-[11px]"
             >
               Cargar imágenes
             </button>
@@ -349,21 +470,25 @@ export const MessageDetail: React.FC<MessageDetailProps> = ({
           </div>
         )}
 
-        {/* Cuerpo del correo */}
-        <div className="pt-4 border-t border-tech-border/50 w-full min-w-0 overflow-hidden">
+        {/* Cuerpo del correo con Tarjeta de Lectura blanca para HTML */}
+        <div className="pt-2 w-full min-w-0">
           {message.html ? (
-            <div className="w-full min-w-0 overflow-x-auto email-content">
-              <div
-                className={`prose prose-invert max-w-none text-zinc-200 text-sm leading-relaxed ${
-                  !showImages ? '[&_img]:hidden' : ''
-                } [&_table]:max-w-full [&_table]:table-auto [&_img]:max-w-full [&_img]:h-auto break-words`}
-                dangerouslySetInnerHTML={{ __html: message.html }}
-              />
+            <div className="w-full min-w-0 bg-white text-zinc-900 rounded-2xl p-4 sm:p-6 shadow-xl border border-zinc-200/30 overflow-hidden">
+              <div className="w-full min-w-0 overflow-x-auto email-content">
+                <div
+                  className={`prose max-w-none text-zinc-900 text-sm leading-relaxed ${
+                    !showImages ? '[&_img]:hidden' : ''
+                  } break-words`}
+                  dangerouslySetInnerHTML={{ __html: message.html }}
+                />
+              </div>
             </div>
           ) : (
-            <pre className="whitespace-pre-wrap font-sans text-sm text-zinc-200 leading-relaxed break-words w-full overflow-x-auto">
-              {message.text}
-            </pre>
+            <div className="w-full min-w-0 bg-tech-carbon rounded-2xl p-4 sm:p-6 border border-tech-border/50">
+              <pre className="whitespace-pre-wrap font-sans text-sm text-zinc-200 leading-relaxed break-words w-full overflow-x-auto">
+                {message.text}
+              </pre>
+            </div>
           )}
         </div>
       </div>
