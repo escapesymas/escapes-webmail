@@ -78,37 +78,47 @@ html, body {
   word-break: break-word;
   overflow-wrap: break-word;
 }
-.email-content h1,
-.email-content [class*="title"],
-.email-content [style*="font-size: 3"],
-.email-content [style*="font-size: 2"] {
-  font-size: clamp(1.2rem, 4.5vw, 1.55rem) !important;
-  line-height: 1.25 !important;
+
+/* Forzar que ningún contenedor exceda el ancho disponible */
+.email-content,
+.email-content * {
   max-width: 100% !important;
-  word-break: break-word !important;
-  overflow-wrap: break-word !important;
+  box-sizing: border-box !important;
 }
-.email-content h2 {
-  font-size: clamp(1.05rem, 3.8vw, 1.35rem) !important;
-  line-height: 1.3 !important;
-  max-width: 100% !important;
-  word-break: break-word !important;
-  overflow-wrap: break-word !important;
-}
+
+/* Tablas fluidas y centradas */
 .email-content table {
   width: 100% !important;
   max-width: 100% !important;
   table-layout: auto !important;
 }
+
 .email-content td,
 .email-content th {
   max-width: 100% !important;
   word-break: break-word !important;
   overflow-wrap: break-word !important;
 }
+
+/* Encabezados y títulos de cualquier clase */
+.email-content h1,
+.email-content h2,
+.email-content .top-heading,
+.email-content [class*="heading"],
+.email-content [class*="title"],
+.email-content [class*="head"] {
+  font-size: clamp(1.1rem, 4.5vw, 1.35rem) !important;
+  line-height: 1.25 !important;
+  max-width: 100% !important;
+  word-break: break-word !important;
+  overflow-wrap: break-word !important;
+}
+
 .email-content img {
   max-width: 100% !important;
   height: auto !important;
+  display: inline-block;
 }
+
 
 

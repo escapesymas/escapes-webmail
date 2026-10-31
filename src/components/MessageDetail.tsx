@@ -98,6 +98,28 @@ export function extractOtpCode(subject = '', text = '', html = ''): string | nul
   return null;
 }
 
+/**
+ * Normaliza y adapta el HTML del correo para pantallas móviles:
+ * - Convierte anchos fijos de escritorio (600px, 700px, etc.) en fluidos (100%).
+ * - Reduce fuentes desmedidas (30px-48px) a tamaños legibles en móvil (20px).
+ * - Elimina alturas fijas y restricciones de nowrap.
+ */
+export function sanitizeEmailHtml(html: string): string {
+  if (!html) return '';
+
+  return html
+    // 1. Reemplazar anchos fijos de 360px o más en atributos HTML (width="700", width=700) por 100%
+    .replace(/\bwidth\s*=\s*["']?(?:[4-9]\d{2,}|\d{4,})["']?/gi, 'width="100%"')
+    // 2. Reemplazar anchos y anchos mínimos fijos de 360px o más en estilos inline
+    .replace(/(?:min-width|max-width|width)\s*:\s*(?:[4-9]\d{2,}|\d{4,})px\b/gi, 'max-width: 100% !important; width: 100% !important; min-width: 0 !important')
+    // 3. Normalizar fuentes grandes excesivas (font-size >= 24px) para pantallas móviles
+    .replace(/font-size\s*:\s*(?:2[4-9]|[3-9]\d|\d{3,})px/gi, 'font-size: 20px; line-height: 1.3')
+    // 4. Normalizar line-heights gigantes asociados a fuentes grandes
+    .replace(/line-height\s*:\s*(?:3[6-9]|[4-9]\d|\d{3,})px/gi, 'line-height: 26px')
+    // 5. Evitar nowrap en bloques de texto
+    .replace(/white-space\s*:\s*nowrap/gi, 'white-space: normal');
+}
+
 export const MessageDetail: React.FC<MessageDetailProps> = ({
   message,
   loading,
@@ -128,6 +150,12 @@ export const MessageDetail: React.FC<MessageDetailProps> = ({
     if (!message) return null;
     return extractOtpCode(message.subject, message.text || '', message.html || '');
   }, [message?.subject, message?.text, message?.html]);
+
+  // HTML saneado y adaptado para pantallas móviles (Hook SIEMPRE al inicio)
+  const sanitizedHtml = React.useMemo(() => {
+    if (!message?.html) return '';
+    return sanitizeEmailHtml(message.html);
+  }, [message?.html]);
 
   // Detectar si el html contiene imágenes externas que podrían ser rastreadores
   const hasExternalImages = Boolean(message?.html && message.html.includes('<img'));
@@ -322,7 +350,7 @@ export const MessageDetail: React.FC<MessageDetailProps> = ({
       </div>
 
       {/* Contenido del correo */}
-      <div className="flex-1 overflow-y-auto overflow-x-hidden p-3.5 sm:p-6 space-y-4 pb-24 md:pb-6 w-full max-w-full min-w-0">
+      <div className="flex-1 overflow-y-auto overflow-x-hidden p-2 sm:p-6 space-y-3 pb-24 md:pb-6 w-full max-w-full min-w-0">
         {/* Cabecera del correo */}
         <div className="w-full min-w-0">
           <h1 className="text-base sm:text-xl font-bold text-white mb-2.5 break-words">
@@ -475,13 +503,13 @@ export const MessageDetail: React.FC<MessageDetailProps> = ({
         {/* Cuerpo del correo con Tarjeta de Lectura blanca para HTML */}
         <div className="pt-2 w-full min-w-0">
           {message.html ? (
-            <div className="w-full min-w-0 bg-white text-zinc-900 rounded-2xl p-4 sm:p-6 shadow-xl border border-zinc-200/30 overflow-hidden">
+            <div className="w-full min-w-0 bg-white text-zinc-900 rounded-2xl p-2.5 sm:p-6 shadow-xl border border-zinc-200/30 overflow-hidden">
               <div className="w-full min-w-0 overflow-x-auto email-content">
                 <div
                   className={`prose max-w-none text-zinc-900 text-sm leading-relaxed ${
                     !showImages ? '[&_img]:hidden' : ''
                   } break-words`}
-                  dangerouslySetInnerHTML={{ __html: message.html }}
+                  dangerouslySetInnerHTML={{ __html: sanitizedHtml }}
                 />
               </div>
             </div>
