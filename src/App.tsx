@@ -690,7 +690,7 @@ export default function App() {
 
         {/* Vista Detalle de Mensaje */}
         <div
-          className={`flex-1 flex flex-col h-full overflow-hidden ${
+          className={`flex-1 flex flex-col h-full overflow-hidden w-full min-w-0 ${
             selectedUid ? 'flex' : 'hidden md:flex'
           }`}
         >

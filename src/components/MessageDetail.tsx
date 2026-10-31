@@ -87,6 +87,27 @@ export const MessageDetail: React.FC<MessageDetailProps> = ({
     );
   }
 
+  const formatDisplayDate = (dStr: string) => {
+    try {
+      const d = new Date(dStr);
+      const now = new Date();
+      const isToday = d.toDateString() === now.toDateString();
+      const timeStr = d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+      if (isToday) {
+        return `Hoy, ${timeStr}`;
+      }
+      const isThisYear = d.getFullYear() === now.getFullYear();
+      const datePart = d.toLocaleDateString('es-ES', {
+        day: 'numeric',
+        month: 'short',
+        year: isThisYear ? undefined : 'numeric',
+      });
+      return `${datePart}, ${timeStr}`;
+    } catch {
+      return dStr;
+    }
+  };
+
   const formatFullDate = (dStr: string) => {
     try {
       return new Date(dStr).toLocaleString('es-ES', {
@@ -131,7 +152,7 @@ export const MessageDetail: React.FC<MessageDetailProps> = ({
   const hasExternalImages = Boolean(message.html && message.html.includes('<img'));
 
   return (
-    <div className="flex-1 flex flex-col h-full bg-tech-card overflow-hidden relative">
+    <div className="flex-1 flex flex-col h-full bg-tech-card overflow-hidden w-full max-w-full min-w-0 relative">
       {/* Barra de herramientas con soporte Safe Area iOS */}
       <div className="pt-header-safe px-3 pb-3 border-b border-tech-border flex items-center justify-between bg-tech-card/80 shrink-0">
         <div className="flex items-center gap-2">
@@ -214,34 +235,43 @@ export const MessageDetail: React.FC<MessageDetailProps> = ({
       </div>
 
       {/* Contenido del correo */}
-      <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 pb-24 md:pb-6">
+      <div className="flex-1 overflow-y-auto overflow-x-hidden p-3.5 sm:p-6 space-y-4 pb-24 md:pb-6 w-full max-w-full min-w-0">
         {/* Cabecera del correo */}
-        <div>
-          <h1 className="text-lg sm:text-xl font-bold text-white mb-3">
+        <div className="w-full min-w-0">
+          <h1 className="text-base sm:text-xl font-bold text-white mb-2.5 break-words">
             {message.subject || '(Sin asunto)'}
           </h1>
 
-          <div className="flex items-start justify-between gap-4 pb-4 border-b border-tech-border/50 text-xs">
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-full bg-tech-yellow/10 border border-tech-yellow/30 flex items-center justify-center text-tech-yellow font-bold text-sm shrink-0">
-                {(message.fromName || message.from).charAt(0).toUpperCase()}
+          <div className="pb-3 border-b border-tech-border/50 text-xs w-full min-w-0 space-y-1.5">
+            <div className="flex items-start justify-between gap-2 w-full min-w-0">
+              <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                <div className="w-8 h-8 rounded-full bg-tech-yellow/10 border border-tech-yellow/30 flex items-center justify-center text-tech-yellow font-bold text-xs shrink-0">
+                  {(message.fromName || message.from).charAt(0).toUpperCase()}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="font-semibold text-white truncate text-sm">
+                    {message.fromName || message.from}
+                  </div>
+                  <div className="text-tech-muted truncate text-[11px]">
+                    De: {message.from}
+                  </div>
+                </div>
               </div>
-              <div className="min-w-0">
-                <span className="font-semibold text-white block truncate">
-                  {message.fromName || message.from}
-                </span>
-                <span className="text-tech-muted truncate block">
-                  De: {message.from}
-                </span>
-                <span className="text-zinc-500 truncate block">
-                  Para: {message.to}
-                </span>
+
+              {/* Fecha visible siempre a la derecha de forma compacta */}
+              <div
+                className="text-tech-muted text-[11px] shrink-0 text-right font-medium"
+                title={formatFullDate(message.date)}
+              >
+                {formatDisplayDate(message.date)}
               </div>
             </div>
 
-            <span className="text-tech-muted shrink-0 text-right">
-              {formatFullDate(message.date)}
-            </span>
+            {/* Destinatario en su propia línea inferior alineada */}
+            <div className="text-zinc-400 text-[11px] truncate pl-[42px]">
+              <span className="text-zinc-500">Para: </span>
+              {message.to}
+            </div>
           </div>
         </div>
 
@@ -320,16 +350,18 @@ export const MessageDetail: React.FC<MessageDetailProps> = ({
         )}
 
         {/* Cuerpo del correo */}
-        <div className="pt-4 border-t border-tech-border/50">
+        <div className="pt-4 border-t border-tech-border/50 w-full min-w-0 overflow-hidden">
           {message.html ? (
-            <div
-              className={`prose prose-invert max-w-none text-zinc-200 text-sm leading-relaxed overflow-x-auto ${
-                !showImages ? '[&_img]:hidden' : ''
-              }`}
-              dangerouslySetInnerHTML={{ __html: message.html }}
-            />
+            <div className="w-full min-w-0 overflow-x-auto email-content">
+              <div
+                className={`prose prose-invert max-w-none text-zinc-200 text-sm leading-relaxed ${
+                  !showImages ? '[&_img]:hidden' : ''
+                } [&_table]:max-w-full [&_table]:table-auto [&_img]:max-w-full [&_img]:h-auto break-words`}
+                dangerouslySetInnerHTML={{ __html: message.html }}
+              />
+            </div>
           ) : (
-            <pre className="whitespace-pre-wrap font-sans text-sm text-zinc-200 leading-relaxed">
+            <pre className="whitespace-pre-wrap font-sans text-sm text-zinc-200 leading-relaxed break-words w-full overflow-x-auto">
               {message.text}
             </pre>
           )}
