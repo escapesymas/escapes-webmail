@@ -1,4 +1,5 @@
 import nodemailer from 'nodemailer';
+import { SIGNATURE_ATTACHMENTS, withSignature } from './signature.js';
 
 export interface SendMailOptions {
   user: string;
@@ -34,23 +35,26 @@ export async function sendEmail(options: SendMailOptions): Promise<{ success: bo
     },
   });
 
+  const { text, html } = withSignature(options.text, options.html);
+
   try {
     const mailOptions: any = {
       from: `"Escapes y Más" <${options.user}>`,
       to: options.to,
       subject: options.subject,
-      text: options.text,
-      html: options.html,
+      text,
+      html,
       replyTo: options.replyTo,
+      // El logotipo de la firma va incrustado (cid), junto a los adjuntos que añada quien escribe.
+      attachments: [
+        ...SIGNATURE_ATTACHMENTS,
+        ...(options.attachments || []).map((att) => ({
+          filename: att.filename,
+          content: Buffer.from(att.content, 'base64'),
+          contentType: att.contentType,
+        })),
+      ],
     };
-
-    if (options.attachments && options.attachments.length > 0) {
-      mailOptions.attachments = options.attachments.map((att) => ({
-        filename: att.filename,
-        content: Buffer.from(att.content, 'base64'),
-        contentType: att.contentType,
-      }));
-    }
 
     const info = await transporter.sendMail(mailOptions);
     return { success: true, messageId: info.messageId };
