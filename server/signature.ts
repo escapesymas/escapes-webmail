@@ -36,9 +36,12 @@ function escapeHtml(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
+/** Las versiones anteriores de la ventana de redactar escribían una firma de texto: se quita para que no salga dos veces. */
+const OLD_TEXT_SIGNATURE = /\s*--\s*\n\s*Escapes y Más\s*\n\s*https:\/\/escapesymas\.com\s*$/;
+
 /** Cuerpo del correo (texto y HTML) con la firma al final. Si solo llega texto, se convierte a HTML. */
 export function withSignature(text?: string, html?: string): { text?: string; html: string } {
-  const plain = (text ?? '').replace(/\s+$/, '');
+  const plain = (text ?? '').replace(OLD_TEXT_SIGNATURE, '').replace(/\s+$/, '');
   const body = html ?? `<div style="font-family:${FONT};font-size:14px;line-height:1.55">${escapeHtml(plain).replace(/\r?\n/g, '<br>')}</div>`;
   return {
     text: text === undefined ? undefined : `${plain}\n\n${SIGNATURE_TEXT}`,

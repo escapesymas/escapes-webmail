@@ -24,7 +24,8 @@ interface ComposeModalProps {
   suggestedContacts?: ContactItem[];
 }
 
-const DEFAULT_SIGNATURE = `\n\n--\nEscapes y Más\nhttps://escapesymas.com`;
+// La firma (con logotipo) la añade el servidor a todo correo enviado: ver server/signature.ts.
+const DEFAULT_SIGNATURE = '';
 const DRAFT_KEY = 'escapes_mail_draft';
 const CONTACTS_KEY = 'escapes_mail_contacts';
 
