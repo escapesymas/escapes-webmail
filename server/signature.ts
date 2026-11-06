@@ -9,7 +9,7 @@ const WEB = 'escapesymas.com';
 
 const FONT = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
 
-export const SIGNATURE_HTML = `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;font-family:${FONT};color:#0f172a">
+export const SIGNATURE_HTML = `<table class="firma-escapesymas" role="presentation" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;font-family:${FONT};color:#0f172a">
   <tr><td style="font-size:17px;line-height:22px;font-weight:700;color:#0f172a">${NAME}</td></tr>
   <tr><td style="padding:8px 0 12px"><table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr><td width="56" height="3" bgcolor="#eab308" style="width:56px;height:3px;line-height:3px;font-size:0;background:#eab308">&nbsp;</td></tr></table></td></tr>
   <tr><td><a href="https://${WEB}" style="text-decoration:none"><img src="cid:${LOGO_CID}" width="150" alt="Escapes y Más" style="display:block;width:150px;height:auto;border:0"></a></td></tr>

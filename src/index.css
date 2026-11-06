@@ -93,6 +93,12 @@ html, body {
   table-layout: auto !important;
 }
 
+/* La firma de Escapes y Más (server/signature.ts) conserva su tamaño: la barra amarilla mide 56 px, no todo el ancho. */
+.email-content table.firma-escapesymas,
+.email-content table.firma-escapesymas table {
+  width: auto !important;
+}
+
 .email-content td,
 .email-content th {
   max-width: 100% !important;
