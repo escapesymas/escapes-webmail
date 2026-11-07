@@ -18,13 +18,17 @@ import {
 import { sendEmail } from './smtp.js';
 import { getVapidPublicKey, saveSubscription, sendPushNotification } from './push.js';
 import { formatSenderNotification, formatSubjectNotification } from './mime.js';
+import { createPassCipher } from './session-crypto.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const JWT_SECRET = process.env.JWT_SECRET || 'escapes-webmail-jwt-secret-key-2026';
+// Sin valor por defecto: el repo es público y con una clave conocida cualquiera firmaría su propia sesión.
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) throw new Error('Falta la variable JWT_SECRET');
+const passCipher = createPassCipher(JWT_SECRET);
 
 // Cabeceras de seguridad (sin añadir dependencias) y sin la marca de Express.
 app.disable('x-powered-by');
@@ -47,17 +51,49 @@ interface AuthUser {
   pass: string;
 }
 
+/** Usuario y contraseña del buzón a partir del contenido del token (la contraseña va cifrada en `pc`). */
+function userFromPayload(payload: any): AuthUser | null {
+  if (!payload || typeof payload.email !== 'string' || typeof payload.pc !== 'string') return null;
+  const pass = passCipher.decrypt(payload.pc);
+  return pass === null ? null : { email: payload.email, pass };
+}
+
+// El token de sesión solo se acepta en la cabecera Authorization: en la URL quedaría en historiales, Referer y logs.
 function authenticateToken(req: any, res: any, next: any) {
   const authHeader = req.headers['authorization'];
-  const token = (authHeader && authHeader.split(' ')[1]) || (req.query.token as string);
+  const token = authHeader && authHeader.split(' ')[1];
 
   if (!token) {
     return res.status(401).json({ error: 'Sesión no iniciada' });
   }
 
-  jwt.verify(token, JWT_SECRET, (err: any, user: any) => {
-    if (err) return res.status(403).json({ error: 'Sesión caducada o inválida' });
-    req.user = user as AuthUser;
+  jwt.verify(token, JWT_SECRET, (err: any, payload: any) => {
+    // Los tokens antiguos (con la contraseña a la vista) y los de adjunto (`scope`) no valen como sesión.
+    const user = err || payload?.scope ? null : userFromPayload(payload);
+    if (!user) return res.status(403).json({ error: 'Sesión caducada o inválida' });
+    req.user = user;
+    next();
+  });
+}
+
+// Previsualizar un adjunto (<img>, <iframe>) no puede mandar cabeceras: va con un token de 10 min que solo vale
+// para ese adjunto (ver /attachment/:index/token), nunca con el de sesión.
+function authenticateAttachment(req: any, res: any, next: any) {
+  if (req.headers['authorization']) return authenticateToken(req, res, next);
+
+  const token = req.query.token as string;
+  if (!token) {
+    return res.status(401).json({ error: 'Sesión no iniciada' });
+  }
+
+  jwt.verify(token, JWT_SECRET, (err: any, p: any) => {
+    const sameAttachment = p && p.scope === 'att'
+      && p.folder === ((req.query.folder as string) || 'INBOX')
+      && p.uid === parseInt(req.params.uid, 10)
+      && p.index === parseInt(req.params.index, 10);
+    const user = err || !sameAttachment ? null : userFromPayload(p);
+    if (!user) return res.status(403).json({ error: 'Sesión caducada o inválida' });
+    req.user = user;
     next();
   });
 }
@@ -81,7 +117,7 @@ app.post('/api/auth/login', async (req, res) => {
       return res.status(401).json({ error: 'Credenciales de correo incorrectas' });
     }
 
-    const token = jwt.sign({ email, pass: password }, JWT_SECRET, { expiresIn: '7d' });
+    const token = jwt.sign({ email, pc: passCipher.encrypt(password) }, JWT_SECRET, { expiresIn: '7d' });
     res.json({ success: true, token, email });
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'Error al conectar con el servidor de correo' });
@@ -134,8 +170,26 @@ app.get('/api/mail/message/:uid', authenticateToken, async (req: any, res) => {
   }
 });
 
+// Token de 10 min para previsualizar un adjunto concreto (el de sesión no puede ir en la URL)
+app.post('/api/mail/message/:uid/attachment/:index/token', authenticateToken, (req: any, res) => {
+  const folder = (req.query.folder as string) || 'INBOX';
+  const uid = parseInt(req.params.uid, 10);
+  const index = parseInt(req.params.index, 10);
+
+  if (isNaN(uid) || isNaN(index)) {
+    return res.status(400).json({ error: 'Parámetros inválidos' });
+  }
+
+  const token = jwt.sign(
+    { email: req.user.email, pc: passCipher.encrypt(req.user.pass), scope: 'att', folder, uid, index },
+    JWT_SECRET,
+    { expiresIn: '10m' }
+  );
+  res.json({ token });
+});
+
 // Descargar archivo adjunto
-app.get('/api/mail/message/:uid/attachment/:index', authenticateToken, async (req: any, res) => {
+app.get('/api/mail/message/:uid/attachment/:index', authenticateAttachment, async (req: any, res) => {
   const folder = (req.query.folder as string) || 'INBOX';
   const uid = parseInt(req.params.uid, 10);
   const index = parseInt(req.params.index, 10);

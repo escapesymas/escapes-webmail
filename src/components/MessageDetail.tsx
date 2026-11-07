@@ -216,7 +216,7 @@ export const MessageDetail: React.FC<MessageDetailProps> = ({
   const isPdfFile = (filename: string, ct = '') =>
     ct === 'application/pdf' || /\.pdf$/i.test(filename);
 
-  const handlePreviewAttachment = (index: number, filename: string, contentType: string) => {
+  const handlePreviewAttachment = async (index: number, filename: string, contentType: string) => {
     const isImage = isImageFile(filename, contentType);
     const isPdf = isPdfFile(filename, contentType);
 
@@ -227,9 +227,21 @@ export const MessageDetail: React.FC<MessageDetailProps> = ({
 
     if (!message) return;
 
-    const url = `/api/mail/message/${message.uid}/attachment/${index}?folder=${encodeURIComponent(
-      currentFolder
-    )}&token=${encodeURIComponent(token || '')}`;
+    // El token de sesión no va en la URL (queda en historiales y logs): se pide uno de 10 min que solo vale para este adjunto.
+    const base = `/api/mail/message/${message.uid}/attachment/${index}?folder=${encodeURIComponent(currentFolder)}`;
+    let attachmentToken = '';
+    try {
+      const res = await fetch(`/api/mail/message/${message.uid}/attachment/${index}/token?folder=${encodeURIComponent(currentFolder)}`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error('token');
+      attachmentToken = (await res.json()).token;
+    } catch {
+      onDownloadAttachment(index, filename);
+      return;
+    }
+    const url = `${base}&token=${encodeURIComponent(attachmentToken)}`;
 
     setPreviewAttachment({
       index,

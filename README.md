@@ -23,4 +23,4 @@ Variables de entorno recomendadas:
 - `MAIL_IMAP_PORT`: `993`
 - `MAIL_IMAP_SECURE`: `true`
 - `MAIL_SMTP_PORT`: `587`
-- `JWT_SECRET`: Clave secreta para tokens de sesión.
+- `JWT_SECRET`: Clave secreta para tokens de sesión (obligatoria: el servidor no arranca sin ella). Firma los tokens y de ella se deriva la clave que cifra la contraseña del buzón dentro del token; si se cambia, todas las sesiones se cierran.
